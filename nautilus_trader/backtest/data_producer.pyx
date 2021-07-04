@@ -171,7 +171,7 @@ cdef class BacktestDataProducer(DataProducerFacade):
             # Process quote tick data
             # -----------------------
             if instrument_id in quote_ticks or instrument_id in bars_bid:
-                if isinstance(quote_ticks[instrument_id], pd.DataFrame) or \
+                if isinstance(quote_ticks.get(instrument_id), pd.DataFrame) or \
                         (instrument_id in bars_bid and isinstance(bars_bid[instrument_id], pd.DataFrame)):
                     ts = unix_timestamp()  # Time data processing
                     quote_wrangler = QuoteTickDataWrangler(
@@ -190,8 +190,8 @@ cdef class BacktestDataProducer(DataProducerFacade):
                         f"Prepared {len(quote_wrangler.processed_data):,} {instrument_id} quote tick rows in "
                         f"{unix_timestamp() - ts:.3f}s.")
                     del quote_wrangler  # Dump processing artifact
-                elif isinstance(quote_ticks[instrument_id], list):
-                    # We have a list of TradeTick objects
+                elif isinstance(quote_ticks.get(instrument_id), list):
+                    # We have a list of QuoteTick objects
                     self._stream = sorted(
                         self._stream + quote_ticks[instrument_id], key=lambda x: x.ts_recv_ns,
                     )
