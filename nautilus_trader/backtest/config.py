@@ -236,7 +236,7 @@ def _check_configs(configs):
     return configs
 
 
-def build_graph(backtest_configs, sync=False):
+def build_graph(backtest_configs, sync=False, use_custom_df=False):
     backtest_configs = _check_configs(backtest_configs)
 
     _ = (
@@ -248,16 +248,19 @@ def build_graph(backtest_configs, sync=False):
         config.check(ignore=("name",))  # check all values set
         input_data = []
         for data_config in config.data_config:
-            load_func = (
-                _load
-                if sync
-                else partial(load, dask_key_name=f"load-{tokenize(data_config.query)}")
-            )
-            input_data.append(
-                load_func(
-                    data_config,
+            if use_custom_df:
+                input_data.append({"data": config.data_config[data_config], "type": QuoteTick, "client_id": None})
+            else:            
+                load_func = (
+                    _load
+                    if sync
+                    else partial(load, dask_key_name=f"load-{tokenize(data_config.query)}")
                 )
-            )
+                input_data.append(
+                    load_func(
+                        data_config,
+                    )
+                )
         run_backtest_func = _run_backtest if sync else run_backtest
         results.append(
             run_backtest_func(
