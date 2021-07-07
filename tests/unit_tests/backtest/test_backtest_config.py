@@ -8,7 +8,6 @@ import pickle
 from typing import Optional
 
 from dask.base import tokenize
-import fsspec
 import pandas as pd
 import pytest
 
@@ -39,20 +38,13 @@ from tests.test_kit.stubs import TestStubs
 
 
 TEST_DATA_DIR = str(pathlib.Path(PACKAGE_ROOT).joinpath("data"))
-CATALOG_DIR = TEST_DATA_DIR + "/catalog"
 
 
-@pytest.fixture(scope="module")
-def catalog_dir():
+@pytest.fixture()
+def catalog_dir(tmp_path):
     # Ensure we have a catalog directory, and its cleaned up after use
-    fs = fsspec.filesystem("file")
-    catalog = str(pathlib.Path(CATALOG_DIR))
-    os.environ.update({"NAUTILUS_BACKTEST_DIR": str(catalog)})
-    if fs.exists(catalog):
-        fs.rm(catalog, recursive=True)
-    fs.mkdir(catalog)
+    os.environ.update({"NAUTILUS_BACKTEST_DIR": str(tmp_path)})
     yield
-    fs.rm(catalog, recursive=True)
 
 
 @pytest.fixture(scope="module")
@@ -78,16 +70,14 @@ def data_loader():
     instrument_provider.add(instrument)
     loader = DataLoader(
         path=TEST_DATA_DIR,
-        parser=CSVParser(
-            parser=partial(parse_csv_tick, instrument_id=TestStubs.audusd_id())
-        ),
+        parser=CSVParser(parser=partial(parse_csv_tick, instrument_id=TestStubs.audusd_id())),
         glob_pattern="truefx-audusd-ticks.csv",
         instrument_provider=instrument_provider,
     )
     return loader
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 def catalog(catalog_dir, data_loader):
     catalog = DataCatalog()
     catalog.import_from_data_loader(loader=data_loader)
@@ -363,7 +353,7 @@ def test_backtest_run_multiprocessing(backtest_configs):
 def test_backtest_run_distributed(backtest_configs):
     from distributed import Client
 
-    _ = Client()
+    _ = Client(processes=False)
     tasks = build_graph(backtest_configs)
     result = tasks.compute()
     assert result
