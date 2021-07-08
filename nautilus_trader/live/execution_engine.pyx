@@ -89,7 +89,7 @@ cdef class LiveExecutionEngine(ExecutionEngine):
         self._run_queue_task = None
         self.is_running = False
 
-    cpdef object get_event_loop(self):
+    def get_event_loop(self) -> asyncio.AbstractEventLoop:
         """
         Return the internal event loop for the engine.
 
@@ -100,7 +100,7 @@ cdef class LiveExecutionEngine(ExecutionEngine):
         """
         return self._loop
 
-    cpdef object get_run_queue_task(self):
+    def get_run_queue_task(self) -> asyncio.Task:
         """
         Return the internal run queue task for the engine.
 
@@ -299,7 +299,6 @@ cdef class LiveExecutionEngine(ExecutionEngine):
 
         """
         Condition.not_none(event, "event")
-        # Do not allow None through (None is a sentinel value which stops the queue)
 
         try:
             self._queue.put_nowait(event)
@@ -350,6 +349,6 @@ cdef class LiveExecutionEngine(ExecutionEngine):
                     f"Message queue processing stopped (qsize={self.qsize()}).",
                 )
 
-    cdef void _enqueue_sentinel(self):
+    cdef void _enqueue_sentinel(self) except *:
         self._queue.put_nowait(self._sentinel)
         self._log.debug(f"Sentinel message placed on message queue.")
