@@ -16,14 +16,15 @@
 import asyncio
 import threading
 import time
-import unittest
 
+from nautilus_trader.adapters.ccxt.factories import CCXTDataClientFactory
+from nautilus_trader.adapters.ccxt.factories import CCXTExecutionClientFactory
 from nautilus_trader.common.enums import ComponentState
 from nautilus_trader.live.node import TradingNode
 from nautilus_trader.trading.strategy import TradingStrategy
 
 
-class TradingNodeConfigurationTests(unittest.TestCase):
+class TestTradingNodeConfiguration:
     def test_config_with_inmemory_execution_database(self):
         # Arrange
         config = {
@@ -62,7 +63,7 @@ class TradingNodeConfigurationTests(unittest.TestCase):
         )
 
         # Assert
-        self.assertIsNotNone(node)
+        assert node is not None
 
     def test_config_with_redis_execution_database(self):
         # Arrange
@@ -84,15 +85,15 @@ class TradingNodeConfigurationTests(unittest.TestCase):
                 "save_state": True,
             },
             "data_clients": {
-                "oanda": {
-                    "api_token": "OANDA_API_TOKEN",  # value is the environment variable name
-                    "account_id": "OANDA_ACCOUNT_ID",  # value is the environment variable name
+                "binance": {
+                    "api_key": "BINANCE_API_KEY",  # value is the environment variable name
+                    "api_secret": "BINANCE_API_SECRET",  # value is the environment variable name
                 },
             },
             "exec_clients": {
-                "oanda": {
-                    "api_token": "OANDA_API_TOKEN",  # value is the environment variable name
-                    "account_id": "OANDA_ACCOUNT_ID",  # value is the environment variable name
+                "binance": {
+                    "api_key": "BINANCE_API_KEY",  # value is the environment variable name
+                    "api_secret": "BINANCE_API_SECRET",  # value is the environment variable name
                 },
             },
         }
@@ -104,11 +105,11 @@ class TradingNodeConfigurationTests(unittest.TestCase):
         )
 
         # Assert
-        self.assertIsNotNone(node)
+        assert node is not None
 
 
-class TradingNodeOperationTests(unittest.TestCase):
-    def setUp(self):
+class TestTradingNodeOperation:
+    def setup(self):
         # Fixture Setup
 
         # Fresh isolated loop testing pattern
@@ -140,18 +141,25 @@ class TradingNodeOperationTests(unittest.TestCase):
             config=config,
         )
 
-        self.node.build()
-
     def test_get_event_loop_returns_a_loop(self):
         # Arrange
         # Act
         loop = self.node.get_event_loop()
 
         # Assert
-        self.assertTrue(isinstance(loop, asyncio.AbstractEventLoop))
+        assert isinstance(loop, asyncio.AbstractEventLoop)
+
+    def test_add_data_client_factory(self):
+        self.node.add_data_client_factory("CCXT", CCXTDataClientFactory)
+        self.node.build()
+
+    def test_add_exec_client_factory(self):
+        self.node.add_exec_client_factory("CCXT", CCXTExecutionClientFactory)
+        self.node.build()
 
     def test_start(self):
         # Arrange
+        self.node.build()
         run = threading.Thread(target=self.node.start, daemon=True)
         run.start()
 
@@ -159,11 +167,12 @@ class TradingNodeOperationTests(unittest.TestCase):
 
         # Act
         # Assert
-        self.assertEqual(ComponentState.RUNNING, self.node.trader.state)
+        assert self.node.trader.state == ComponentState.RUNNING
         self.loop.call_soon_threadsafe(self.node.stop)
 
     def test_stop(self):
         # Arrange
+        self.node.build()
         run = threading.Thread(target=self.node.start, daemon=True)
         run.start()
 
@@ -174,10 +183,11 @@ class TradingNodeOperationTests(unittest.TestCase):
 
         # Act
         # Assert
-        self.assertEqual(ComponentState.STOPPED, self.node.trader.state)
+        assert self.node.trader.state == ComponentState.STOPPED
 
     def test_dispose(self):
         # Arrange
+        self.node.build()
         run = threading.Thread(target=self.node.start, daemon=True)
         run.start()
 
@@ -191,4 +201,4 @@ class TradingNodeOperationTests(unittest.TestCase):
 
         # Act
         # Assert
-        self.assertEqual(ComponentState.DISPOSED, self.node.trader.state)
+        assert self.node.trader.state == ComponentState.DISPOSED

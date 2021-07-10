@@ -27,7 +27,6 @@ import msgpack
 import redis
 
 from nautilus_trader.cache.cache import Cache
-from nautilus_trader.cache.database import BypassCacheDatabase
 from nautilus_trader.common.clock import LiveClock
 from nautilus_trader.common.enums import ComponentState
 from nautilus_trader.common.logging import LiveLogger
@@ -98,7 +97,7 @@ class TradingNode:
 
         # Extract configs
         config_trader = config.get("trader", {})
-        config_system = config.get("system", {})
+        config_system: Dict[str, object] = config.get("system", {})
         config_log = config.get("logging", {})
         config_db = config.get("database", {})
         config_cache = config.get("cache", {})
@@ -161,8 +160,9 @@ class TradingNode:
         ########################################################################
         # Build platform
         ########################################################################
-
-        if config_db["type"] == "redis":
+        if config_db["type"] == "in-memory":
+            cache_db = None
+        elif config_db["type"] == "redis":
             cache_db = RedisCacheDatabase(
                 trader_id=self.trader_id,
                 logger=self._logger,
@@ -175,9 +175,9 @@ class TradingNode:
                 },
             )
         else:
-            cache_db = BypassCacheDatabase(
-                trader_id=self.trader_id,
-                logger=self._logger,
+            raise ValueError(
+                "The cache_db_type in the configuration is unrecognized, "
+                "can one of {{'in-memory', 'redis'}}.",
             )
 
         cache = Cache(
@@ -204,6 +204,7 @@ class TradingNode:
         self._exec_engine = LiveExecutionEngine(
             loop=self._loop,
             portfolio=self.portfolio,
+            trader_id=self.trader_id,
             cache=cache,
             clock=self._clock,
             logger=self._logger,
@@ -431,7 +432,6 @@ class TradingNode:
 
             self._log.info("Stopping event loop...")
             self._cancel_all_tasks()
-            self._logger.stop()
             self._loop.stop()
         except RuntimeError as ex:
             self._log.exception(ex)
@@ -637,6 +637,7 @@ class TradingNode:
             self._log.info(f"Cancelled Timer(name={name}).")
 
         self._log.info("state=STOPPED.")
+        self._logger.stop()
         self._is_running = False
 
     async def _await_engines_disconnected(self) -> bool:

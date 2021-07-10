@@ -25,7 +25,7 @@ from nautilus_trader.common.logging cimport Logger
 from nautilus_trader.common.queue cimport Queue
 from nautilus_trader.core.correctness cimport Condition
 from nautilus_trader.core.message cimport Message
-from nautilus_trader.core.message cimport MessageType
+from nautilus_trader.core.message cimport MessageCategory
 from nautilus_trader.execution.engine cimport ExecutionEngine
 from nautilus_trader.execution.messages cimport ExecutionMassStatus
 from nautilus_trader.execution.messages cimport OrderStatusReport
@@ -35,6 +35,7 @@ from nautilus_trader.model.commands cimport TradingCommand
 from nautilus_trader.model.events cimport Event
 from nautilus_trader.model.identifiers cimport ClientId
 from nautilus_trader.model.identifiers cimport ClientOrderId
+from nautilus_trader.model.identifiers cimport TraderId
 from nautilus_trader.model.orders.base cimport Order
 from nautilus_trader.trading.portfolio cimport Portfolio
 
@@ -49,6 +50,7 @@ cdef class LiveExecutionEngine(ExecutionEngine):
         self,
         loop not None: asyncio.AbstractEventLoop,
         Portfolio portfolio not None,
+        TraderId trader_id not None,
         Cache cache not None,
         LiveClock clock not None,
         Logger logger not None,
@@ -61,6 +63,8 @@ cdef class LiveExecutionEngine(ExecutionEngine):
         ----------
         loop : asyncio.AbstractEventLoop
             The event loop for the engine.
+        trader_id : TraderId
+            The trader ID for the engine.
         portfolio : Portfolio
             The portfolio for the engine.
         cache : Cache
@@ -77,6 +81,7 @@ cdef class LiveExecutionEngine(ExecutionEngine):
             config = {}
         super().__init__(
             portfolio=portfolio,
+            trader_id=trader_id,
             cache=cache,
             clock=clock,
             logger=logger,
@@ -89,7 +94,7 @@ cdef class LiveExecutionEngine(ExecutionEngine):
         self._run_queue_task = None
         self.is_running = False
 
-    cpdef object get_event_loop(self):
+    def get_event_loop(self) -> asyncio.AbstractEventLoop:
         """
         Return the internal event loop for the engine.
 
@@ -100,7 +105,7 @@ cdef class LiveExecutionEngine(ExecutionEngine):
         """
         return self._loop
 
-    cpdef object get_run_queue_task(self):
+    def get_run_queue_task(self) -> asyncio.Task:
         """
         Return the internal run queue task for the engine.
 
@@ -299,7 +304,6 @@ cdef class LiveExecutionEngine(ExecutionEngine):
 
         """
         Condition.not_none(event, "event")
-        # Do not allow None through (None is a sentinel value which stops the queue)
 
         try:
             self._queue.put_nowait(event)
@@ -334,9 +338,9 @@ cdef class LiveExecutionEngine(ExecutionEngine):
                 message = await self._queue.get()
                 if message is None:  # Sentinel message (fast C-level check)
                     continue         # Returns to the top to check `self.is_running`
-                if message.type == MessageType.EVENT:
+                if message.category == MessageCategory.EVENT:
                     self._handle_event(message)
-                elif message.type == MessageType.COMMAND:
+                elif message.category == MessageCategory.COMMAND:
                     self._execute_command(message)
                 else:
                     self._log.error(f"Cannot handle message: unrecognized {message}.")
@@ -350,6 +354,6 @@ cdef class LiveExecutionEngine(ExecutionEngine):
                     f"Message queue processing stopped (qsize={self.qsize()}).",
                 )
 
-    cdef void _enqueue_sentinel(self):
+    cdef void _enqueue_sentinel(self) except *:
         self._queue.put_nowait(self._sentinel)
         self._log.debug(f"Sentinel message placed on message queue.")
