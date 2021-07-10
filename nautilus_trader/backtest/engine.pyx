@@ -134,6 +134,7 @@ cdef class BacktestEngine:
         self._cache_db_flush = cache_db_flush
         self._use_data_cache = use_data_cache
         self._run_analysis = run_analysis
+        self._bypass_logging = bypass_logging
 
         # Data
         self._generic_data = []     # type: list[GenericData]
@@ -172,9 +173,10 @@ cdef class BacktestEngine:
             bypass=bypass_logging,
         )
 
-        nautilus_header(self._log)
-        self._log.info("=================================================================")
-        self._log.info("Building engine...")
+        if not self._bypass_logging:
+            nautilus_header(self._log)
+            self._log.info("=================================================================")
+            self._log.info("Building engine...")
 
         ########################################################################
         # Build platform
@@ -871,8 +873,9 @@ cdef class BacktestEngine:
 
         cdef datetime run_started = self._clock.utc_now()
 
-        self._pre_run(run_started, start, stop)
-        self._log.info(f"Setting up backtest...")
+        if not self._bypass_logging:
+            self._pre_run(run_started, start, stop)
+            self._log.info(f"Setting up backtest...")
 
         # Reset engine to fresh state (in case already run)
         self.reset()
@@ -921,12 +924,14 @@ cdef class BacktestEngine:
         # ---------------------------------------------------------------------#
 
         self.trader.stop()
-        self._post_run(
-            run_started=run_started,
-            run_finished=self._clock.utc_now(),
-            start=start,
-            stop=stop,
-        )
+
+        if not self._bypass_logging:
+            self._post_run(
+                run_started=run_started,
+                run_finished=self._clock.utc_now(),
+                start=start,
+                stop=stop,
+            )
 
     cdef void _advance_time(self, int64_t now_ns) except *:
         cdef TradingStrategy strategy

@@ -46,6 +46,7 @@ cdef class BacktestEngine:
     cdef bint _cache_db_flush
     cdef bint _use_data_cache
     cdef bint _run_analysis
+    cdef bint _bypass_logging
 
     cdef dict _exchanges
     cdef list _generic_data
