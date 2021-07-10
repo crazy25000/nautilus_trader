@@ -14,11 +14,14 @@
 # -------------------------------------------------------------------------------------------------
 
 import pandas as pd
+
 from libc.stdint cimport int64_t
 
 from decimal import Decimal
+
 from cpython.datetime cimport datetime
 
+from nautilus_trader.core.correctness cimport Condition
 from nautilus_trader.model.c_enums.asset_class cimport AssetClass
 from nautilus_trader.model.c_enums.asset_type cimport AssetType
 from nautilus_trader.model.currency cimport Currency
@@ -117,16 +120,14 @@ cdef class BettingInstrument(Instrument):
 
     @staticmethod
     cdef BettingInstrument from_dict_c(dict values):
-        data = values.copy()
-        data['event_open_date'] = pd.Timestamp(data['event_open_date'])
-        data['market_start_time'] = pd.Timestamp(data['market_start_time'])
-        return BettingInstrument(**{k: v for k, v in data.items() if k not in ('instrument_id',)})
+        Condition.not_none(values, "values")
+        return BettingInstrument(**values)
 
     @staticmethod
     cdef dict to_dict_c(BettingInstrument obj):
+        Condition.not_none(obj, "obj")
         return {
             "type": "BettingInstrument",
-            "instrument_id": obj.id.value,
             "venue_name": obj.id.venue.value,
             "event_type_id": obj.event_type_id,
             "event_type_name": obj.event_type_name,
@@ -135,11 +136,11 @@ cdef class BettingInstrument(Instrument):
             "event_id": obj.event_id,
             "event_name": obj.event_name,
             "event_country_code": obj.event_country_code,
-            "event_open_date": obj.event_open_date.isoformat(),
+            "event_open_date": obj.event_open_date,
             "betting_type": obj.betting_type,
             "market_id": obj.market_id,
             "market_name": obj.market_name,
-            "market_start_time": obj.market_start_time.isoformat(),
+            "market_start_time": obj.market_start_time,
             "market_type": obj.market_type,
             "selection_id": obj.selection_id,
             "selection_name": obj.selection_name,
@@ -164,7 +165,6 @@ cdef class BettingInstrument(Instrument):
         BettingInstrument
 
         """
-
         return BettingInstrument.from_dict_c(values)
 
     @staticmethod

@@ -43,7 +43,7 @@ cdef class OandaDataClientFactory(LiveDataClientFactory):
         Parameters
         ----------
         name : str
-            The client name.
+            The name for the client.
         config : dict
             The configuration dictionary.
         engine : DataEngine

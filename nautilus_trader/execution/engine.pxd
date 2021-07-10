@@ -26,10 +26,7 @@ from nautilus_trader.model.events cimport AccountState
 from nautilus_trader.model.events cimport Event
 from nautilus_trader.model.events cimport OrderEvent
 from nautilus_trader.model.events cimport OrderFilled
-from nautilus_trader.model.events cimport PositionChanged
-from nautilus_trader.model.events cimport PositionClosed
 from nautilus_trader.model.events cimport PositionEvent
-from nautilus_trader.model.events cimport PositionOpened
 from nautilus_trader.model.identifiers cimport StrategyId
 from nautilus_trader.model.identifiers cimport TraderId
 from nautilus_trader.model.identifiers cimport Venue
@@ -111,7 +108,4 @@ cdef class ExecutionEngine(Component):
     cdef void _open_position(self, OrderFilled fill) except *
     cdef void _update_position(self, Position position, OrderFilled fill) except *
     cdef void _flip_position(self, Position position, OrderFilled fill) except *
-    cdef PositionOpened _pos_opened_event(self, Position position, OrderFilled fill)
-    cdef PositionChanged _pos_changed_event(self, Position position, OrderFilled fill)
-    cdef PositionClosed _pos_closed_event(self, Position position, OrderFilled fill)
     cdef void _send_to_strategy(self, Event event, StrategyId strategy_id) except *

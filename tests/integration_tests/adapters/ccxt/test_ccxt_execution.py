@@ -15,7 +15,6 @@
 
 import asyncio
 import json
-import unittest
 from unittest.mock import MagicMock
 
 from nautilus_trader.adapters.ccxt.execution import CCXTExecutionClient
@@ -51,8 +50,8 @@ async def async_magic():
     return
 
 
-class CCXTExecutionClientTests(unittest.TestCase):
-    def setUp(self):
+class TestCCXTExecutionClient:
+    def setup(self):
         # Fixture Setup
         self.clock = LiveClock()
         self.uuid_factory = UUIDFactory()
@@ -81,6 +80,7 @@ class CCXTExecutionClientTests(unittest.TestCase):
         self.exec_engine = LiveExecutionEngine(
             loop=self.loop,
             portfolio=self.portfolio,
+            trader_id=self.trader_id,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -123,7 +123,7 @@ class CCXTExecutionClientTests(unittest.TestCase):
 
         self.exec_engine.register_client(self.client)
 
-    def tearDown(self):
+    def teardown(self):
         self.loop.stop()
         self.loop.close()
 
@@ -135,7 +135,7 @@ class CCXTExecutionClientTests(unittest.TestCase):
             await asyncio.sleep(0.3)  # Allow engine message queue to start
 
             # Assert
-            self.assertTrue(self.client.is_connected)
+            assert self.client.is_connected
 
             # Tear down
             self.exec_engine.stop()
@@ -154,7 +154,7 @@ class CCXTExecutionClientTests(unittest.TestCase):
             await asyncio.sleep(0.3)
 
             # Assert
-            self.assertFalse(self.client.is_connected)
+            assert not self.client.is_connected
 
             # Tear down
             self.exec_engine.stop()
@@ -175,7 +175,7 @@ class CCXTExecutionClientTests(unittest.TestCase):
             self.client.reset()
 
             # Assert
-            self.assertFalse(self.client.is_connected)
+            assert not self.client.is_connected
 
         self.loop.run_until_complete(run_test())
 
@@ -189,7 +189,7 @@ class CCXTExecutionClientTests(unittest.TestCase):
             self.client.reset()
 
             # Assert
-            self.assertTrue(self.client.is_connected)
+            assert self.client.is_connected
 
             # Tear Down
             self.exec_engine.stop()
@@ -207,7 +207,7 @@ class CCXTExecutionClientTests(unittest.TestCase):
             self.client.dispose()
 
             # Assert
-            self.assertTrue(self.client.is_connected)
+            assert self.client.is_connected
 
             # Tear Down
             self.exec_engine.stop()

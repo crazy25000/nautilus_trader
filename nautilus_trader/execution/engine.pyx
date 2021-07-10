@@ -87,6 +87,7 @@ cdef class ExecutionEngine(Component):
     def __init__(
         self,
         Portfolio portfolio not None,
+        TraderId trader_id not None,
         Cache cache not None,
         Clock clock not None,
         Logger logger not None,
@@ -122,13 +123,13 @@ cdef class ExecutionEngine(Component):
         self._routing_map = {}       # type: dict[Venue, ExecutionClient]
         self._default_client = None  # type: Optional[ExecutionClient]
         self._pos_id_generator = PositionIdGenerator(
-            trader_id=cache.trader_id,
+            trader_id=trader_id,
             clock=clock,
         )
         self._portfolio = portfolio
         self._risk_engine = None  # Initialized when risk engine registered
 
-        self.trader_id = cache.trader_id
+        self.trader_id = trader_id
         self.cache = cache
 
         # Counters
@@ -778,7 +779,14 @@ cdef class ExecutionEngine(Component):
 
         self._risk_engine.process(fill)
         self._send_to_strategy(fill, fill.strategy_id)
-        self.process(self._pos_opened_event(position, fill))
+
+        cdef PositionOpened opened = PositionOpened.create_c(
+            position=position,
+            fill=fill,
+            event_id=self._uuid_factory.generate(),
+            timestamp_ns=self._clock.timestamp_ns(),
+        )
+        self.process(opened)
 
     cdef void _update_position(self, Position position, OrderFilled fill) except *:
         # Check for flip
@@ -797,9 +805,19 @@ cdef class ExecutionEngine(Component):
 
         cdef PositionEvent position_event
         if position.is_closed_c():
-            position_event = self._pos_closed_event(position, fill)
+            position_event = PositionClosed.create_c(
+                position=position,
+                fill=fill,
+                event_id=self._uuid_factory.generate(),
+                timestamp_ns=self._clock.timestamp_ns(),
+            )
         else:
-            position_event = self._pos_changed_event(position, fill)
+            position_event = PositionChanged.create_c(
+                position=position,
+                fill=fill,
+                event_id=self._uuid_factory.generate(),
+                timestamp_ns=self._clock.timestamp_ns(),
+            )
 
         self._risk_engine.process(fill)
         self._send_to_strategy(fill, fill.strategy_id)
@@ -868,39 +886,6 @@ cdef class ExecutionEngine(Component):
 
         # Open flipped position
         self._handle_order_fill(fill_split2)
-
-    cdef PositionOpened _pos_opened_event(self, Position position, OrderFilled fill):
-        return PositionOpened(
-            position_id=position.id,
-            strategy_id=position.strategy_id,
-            instrument_id=position.instrument_id,
-            position_status=position.to_dict(),
-            order_fill=fill,
-            event_id=self._uuid_factory.generate(),
-            timestamp_ns=fill.timestamp_ns,
-        )
-
-    cdef PositionChanged _pos_changed_event(self, Position position, OrderFilled fill):
-        return PositionChanged(
-            position_id=position.id,
-            strategy_id=position.strategy_id,
-            instrument_id=position.instrument_id,
-            position_status=position.to_dict(),
-            order_fill=fill,
-            event_id=self._uuid_factory.generate(),
-            timestamp_ns=fill.timestamp_ns,
-        )
-
-    cdef PositionClosed _pos_closed_event(self, Position position, OrderFilled fill):
-        return PositionClosed(
-            position_id=position.id,
-            strategy_id=position.strategy_id,
-            instrument_id=position.instrument_id,
-            position_status=position.to_dict(),
-            order_fill=fill,
-            event_id=self._uuid_factory.generate(),
-            timestamp_ns=fill.timestamp_ns,
-        )
 
     cdef void _send_to_strategy(self, Event event, StrategyId strategy_id) except *:
         if strategy_id is None:

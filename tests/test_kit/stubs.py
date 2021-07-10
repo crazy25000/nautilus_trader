@@ -20,7 +20,6 @@ from typing import List
 import pytz
 
 from nautilus_trader.cache.cache import Cache
-from nautilus_trader.cache.database import BypassCacheDatabase
 from nautilus_trader.common.clock import LiveClock
 from nautilus_trader.common.logging import LiveLogger
 from nautilus_trader.core.uuid import uuid4
@@ -481,36 +480,27 @@ class TestStubs:
 
     @staticmethod
     def event_position_opened(position) -> PositionOpened:
-        return PositionOpened(
-            position_id=position.id,
-            strategy_id=position.strategy_id,
-            instrument_id=position.instrument_id,
-            position_status=position.to_dict(),
-            order_fill=position.last_event,
+        return PositionOpened.create(
+            position=position,
+            fill=position.last_event,
             event_id=uuid4(),
             timestamp_ns=0,
         )
 
     @staticmethod
     def event_position_changed(position) -> PositionChanged:
-        return PositionChanged(
-            position_id=position.id,
-            strategy_id=position.strategy_id,
-            instrument_id=position.instrument_id,
-            position_status=position.to_dict(),
-            order_fill=position.last_event,
+        return PositionChanged.create(
+            position=position,
+            fill=position.last_event,
             event_id=uuid4(),
             timestamp_ns=0,
         )
 
     @staticmethod
     def event_position_closed(position) -> PositionClosed:
-        return PositionClosed(
-            position_id=position.id,
-            strategy_id=position.strategy_id,
-            instrument_id=position.instrument_id,
-            position_status=position.to_dict(),
-            order_fill=position.last_event,
+        return PositionClosed.create(
+            position=position,
+            fill=position.last_event,
             event_id=uuid4(),
             timestamp_ns=0,
         )
@@ -524,16 +514,9 @@ class TestStubs:
         return LiveLogger(loop=asyncio.get_event_loop(), clock=TestStubs.clock())
 
     @staticmethod
-    def cache_db():
-        return BypassCacheDatabase(
-            trader_id=TestStubs.trader_id(),
-            logger=TestStubs.logger(),
-        )
-
-    @staticmethod
     def cache():
         return Cache(
-            database=TestStubs.cache_db(),
+            database=None,
             logger=TestStubs.logger(),
         )
 
@@ -560,6 +543,7 @@ class TestStubs:
         return MockLiveExecutionEngine(
             loop=asyncio.get_event_loop(),
             portfolio=TestStubs.portfolio(),
+            trader_id=TestStubs.trader_id(),
             cache=TestStubs.cache(),
             clock=TestStubs.clock(),
             logger=TestStubs.logger(),
