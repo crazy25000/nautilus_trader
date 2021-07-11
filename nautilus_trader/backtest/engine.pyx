@@ -271,7 +271,8 @@ cdef class BacktestEngine:
         self.iteration = 0
 
         self.time_to_initialize = self._clock.delta(self.created_time)
-        self._log.info(f"Initialized in {self.time_to_initialize.total_seconds():.3f}s.")
+        if not self._bypass_logging:
+            self._log.info(f"Initialized in {self.time_to_initialize.total_seconds():.3f}s.")
 
     def get_exec_engine(self) -> ExecutionEngine:
         """
@@ -318,7 +319,8 @@ cdef class BacktestEngine:
             key=lambda x: x.ts_recv_ns,
         )
 
-        self._log.info(f"Added {len(data)} GenericData points.")
+        if not self._bypass_logging:
+            self._log.info(f"Added {len(data)} GenericData points.")
 
     def add_data(self, ClientId client_id, list data) -> None:
         """
@@ -351,7 +353,8 @@ cdef class BacktestEngine:
             key=lambda x: x.ts_recv_ns,
         )
 
-        self._log.info(f"Added {len(data)} Data.")
+        if not self._bypass_logging:
+            self._log.info(f"Added {len(data)} Data.")
 
     def add_instrument(self, Instrument instrument) -> None:
         """
@@ -371,7 +374,8 @@ cdef class BacktestEngine:
         # Add data
         self._data_engine.process(instrument)
 
-        self._log.info(f"Added {instrument.id} Instrument.")
+        if not self._bypass_logging:
+            self._log.info(f"Added {instrument.id} Instrument.")
 
     def add_order_book_data(self, list data) -> None:
         """
@@ -408,8 +412,9 @@ cdef class BacktestEngine:
             self._order_book_data + data,
             key=lambda x: x.ts_recv_ns,
         )
-
-        self._log.info(f"Added {len(data)} {instrument_id} OrderBookData elements (total: {len(self._order_book_data)}).")
+        
+        if not self._bypass_logging:
+            self._log.info(f"Added {len(data)} {instrument_id} OrderBookData elements (total: {len(self._order_book_data)}).")
 
     def add_quote_ticks(self, InstrumentId instrument_id, data: pd.DataFrame) -> None:
         """
@@ -452,7 +457,8 @@ cdef class BacktestEngine:
         self._quote_ticks[instrument_id] = data
         self._quote_ticks = dict(sorted(self._quote_ticks.items()))
 
-        self._log.info(f"Added {len(data)} {instrument_id} QuoteTick data elements.")
+        if not self._bypass_logging:
+            self._log.info(f"Added {len(data)} {instrument_id} QuoteTick data elements.")
 
     def add_quote_ticks_objects(self, InstrumentId instrument_id, list data) -> None:
         """
@@ -483,7 +489,8 @@ cdef class BacktestEngine:
         self._quote_ticks[instrument_id] = data
         self._quote_ticks = dict(sorted(self._quote_ticks.items()))
 
-        self._log.info(f"Added {len(data)} {instrument_id} QuoteTick data elements.")
+        if not self._bypass_logging:
+            self._log.info(f"Added {len(data)} {instrument_id} QuoteTick data elements.")
 
     def add_trade_ticks(self, InstrumentId instrument_id, data: pd.DataFrame) -> None:
         """
@@ -526,8 +533,9 @@ cdef class BacktestEngine:
         # Add data
         self._trade_ticks[instrument_id] = data
         self._trade_ticks = dict(sorted(self._trade_ticks.items()))
-
-        self._log.info(f"Added {len(data)} {instrument_id} TradeTick data elements.")
+        
+        if not self._bypass_logging:
+            self._log.info(f"Added {len(data)} {instrument_id} TradeTick data elements.")
 
     def add_trade_tick_objects(self, InstrumentId instrument_id, list data) -> None:
         """
@@ -558,7 +566,8 @@ cdef class BacktestEngine:
         self._trade_ticks[instrument_id] = data
         self._trade_ticks = dict(sorted(self._trade_ticks.items()))
 
-        self._log.info(f"Added {len(data)} {instrument_id} TradeTick data elements.")
+        if not self._bypass_logging:
+            self._log.info(f"Added {len(data)} {instrument_id} TradeTick data elements.")
 
     def add_bars(
         self,
@@ -634,12 +643,12 @@ cdef class BacktestEngine:
                     raise RuntimeError(f"{dataframe} bid ask shape is not equal")
                 if not all(dataframe.index == indices[aggregation]):
                     raise RuntimeError(f"{dataframe} bid ask index is not equal")
-
-        self._log.info(
-            f"Added {len(data)} {instrument_id} "
-            f"{BarAggregationParser.to_str(aggregation)}-{PriceTypeParser.to_str(price_type)} "
-            f"Bar data elements."
-        )
+        if not self._bypass_logging:
+            self._log.info(
+                f"Added {len(data)} {instrument_id} "
+                f"{BarAggregationParser.to_str(aggregation)}-{PriceTypeParser.to_str(price_type)} "
+                f"Bar data elements."
+            )
 
     def add_venue(
         self,
@@ -733,7 +742,8 @@ cdef class BacktestEngine:
         exchange.register_client(exec_client)
         self._exec_engine.register_client(exec_client)
 
-        self._log.info(f"Added {venue} SimulatedExchange.")
+        if not self._bypass_logging:
+            self._log.info(f"Added {venue} SimulatedExchange.")
 
     def reset(self) -> None:
         """
@@ -767,7 +777,8 @@ cdef class BacktestEngine:
 
         self.iteration = 0
 
-        self._log.info("Reset.")
+        if not self._bypass_logging:
+            self._log.info("Reset.")
 
     def dispose(self) -> None:
         """
@@ -847,7 +858,8 @@ cdef class BacktestEngine:
             if self._use_data_cache:
                 self._data_producer = CachedProducer(self._data_producer)
 
-        log_memory(self._log)
+        if not self._bypass_logging:
+            log_memory(self._log)
 
         # Setup start datetime
         if start is None:
@@ -898,7 +910,8 @@ cdef class BacktestEngine:
             self.trader.initialize_strategies(strategies, warn_no_strategies=False)
 
         # Run the backtest
-        self._log.info(f"Running backtest...")
+        if not self._bypass_logging:
+            self._log.info(f"Running backtest...")
 
         for strategy in self.trader.strategies_c():
             strategy.clock.set_time(start_ns)
@@ -980,28 +993,30 @@ cdef class BacktestEngine:
         datetime start,
         datetime stop,
     ) except *:
-        self._log.info("=================================================================")
-        self._log.info(" BACKTEST DIAGNOSTICS")
-        self._log.info("=================================================================")
-        self._log.info(f"Run started:    {format_iso8601(run_started)}")
-        self._log.info(f"Run finished:   {format_iso8601(run_finished)}")
-        self._log.info(f"Backtest start: {format_iso8601(start)}")
-        self._log.info(f"Backtest stop:  {format_iso8601(stop)}")
-        self._log.info(f"Elapsed time:   {run_finished - run_started}")
-        for resolution in self._data_producer.execution_resolutions:
-            self._log.info(f"Execution resolution: {resolution}")
-        self._log.info(f"Iterations: {self.iteration:,}")
-        self._log.info(f"Total events: {self._exec_engine.event_count:,}")
-        self._log.info(f"Total orders: {self._exec_engine.cache.orders_total_count():,}")
-        self._log.info(f"Total positions: {self._exec_engine.cache.positions_total_count():,}")
+        if not self._bypass_logging:
+            self._log.info("=================================================================")
+            self._log.info(" BACKTEST DIAGNOSTICS")
+            self._log.info("=================================================================")
+            self._log.info(f"Run started:    {format_iso8601(run_started)}")
+            self._log.info(f"Run finished:   {format_iso8601(run_finished)}")
+            self._log.info(f"Backtest start: {format_iso8601(start)}")
+            self._log.info(f"Backtest stop:  {format_iso8601(stop)}")
+            self._log.info(f"Elapsed time:   {run_finished - run_started}")
+            for resolution in self._data_producer.execution_resolutions:
+                self._log.info(f"Execution resolution: {resolution}")
+            self._log.info(f"Iterations: {self.iteration:,}")
+            self._log.info(f"Total events: {self._exec_engine.event_count:,}")
+            self._log.info(f"Total orders: {self._exec_engine.cache.orders_total_count():,}")
+            self._log.info(f"Total positions: {self._exec_engine.cache.positions_total_count():,}")
 
         if not self._run_analysis:
             return
 
         for exchange in self._exchanges.values():
-            self._log.info("=================================================================")
-            self._log.info(f" {exchange.exec_client.account_id.value}")
-            self._log.info("=================================================================")
+            if not self._bypass_logging:
+                self._log.info("=================================================================")
+                self._log.info(f" {exchange.exec_client.account_id.value}")
+                self._log.info("=================================================================")
             account = exchange.exec_client.get_account()
             if exchange.is_frozen_account:
                 self._log.warning(f"ACCOUNT FROZEN")
@@ -1016,18 +1031,20 @@ cdef class BacktestEngine:
                 account_balances_ending = pad_string(account_balances_ending, account_starting_length)
                 account_commissions = pad_string(account_commissions, account_starting_length)
                 unrealized_pnls = pad_string(unrealized_pnls, account_starting_length)
-                self._log.info(f"Account balances (starting): {account_balances_starting}")
-                self._log.info(f"Account balances (ending):   {account_balances_ending}")
-                self._log.info(f"Commissions (total):         {account_commissions}")
-                self._log.info(f"Unrealized PnLs:             {unrealized_pnls}")
+                if not self._bypass_logging:
+                    self._log.info(f"Account balances (starting): {account_balances_starting}")
+                    self._log.info(f"Account balances (ending):   {account_balances_ending}")
+                    self._log.info(f"Commissions (total):         {account_commissions}")
+                    self._log.info(f"Unrealized PnLs:             {unrealized_pnls}")
 
             # Log output diagnostics for all simulation modules
-            for module in exchange.modules:
-                module.log_diagnostics(self._log)
+            if not self._bypass_logging:
+                for module in exchange.modules:
+                    module.log_diagnostics(self._log)
 
-            self._log.info("=================================================================")
-            self._log.info(" PERFORMANCE STATISTICS")
-            self._log.info("=================================================================")
+                self._log.info("=================================================================")
+                self._log.info(" PERFORMANCE STATISTICS")
+                self._log.info("=================================================================")
 
             # Find all positions for exchange venue
             positions = []
@@ -1039,17 +1056,18 @@ cdef class BacktestEngine:
             self.analyzer.calculate_statistics(account, positions)
 
             # Present PnL performance stats per asset
-            for currency in account.currencies():
-                self._log.info(f" {str(currency)}")
-                self._log.info("-----------------------------------------------------------------")
-                for statistic in self.analyzer.get_performance_stats_pnls_formatted(currency):
-                    self._log.info(statistic)
-                self._log.info("-----------------------------------------------------------------")
+            if not self._bypass_logging:
+                for currency in account.currencies():
+                    self._log.info(f" {str(currency)}")
+                    self._log.info("-----------------------------------------------------------------")
+                    for statistic in self.analyzer.get_performance_stats_pnls_formatted(currency):
+                        self._log.info(statistic)
+                    self._log.info("-----------------------------------------------------------------")
 
-            self._log.info(" Returns")
-            self._log.info("-----------------------------------------------------------------")
-            for statistic in self.analyzer.get_performance_stats_returns_formatted():
-                self._log.info(statistic)
+                self._log.info(" Returns")
+                self._log.info("-----------------------------------------------------------------")
+                for statistic in self.analyzer.get_performance_stats_returns_formatted():
+                    self._log.info(statistic)
 
     def _add_data_client_if_not_exists(self, ClientId client_id) -> None:
         if client_id not in self._data_engine.registered_clients:

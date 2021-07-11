@@ -183,14 +183,8 @@ def run_engine(engine, strategies):
     strategies = [cls(**kw) for cls, kw in strategies]
     engine.run(strategies=strategies)
     data = {
-        "account": pd.concat(
-            [
-                engine.trader.generate_account_report(venue).assign(venue=venue)
-                for venue in engine.list_venues()
-            ]
-        ),
-        "fills": engine.trader.generate_order_fills_report(),
         "positions": engine.trader.generate_positions_report(),
+        "strategy_params": strategies[0].gparams()
     }
     engine.dispose()
     return data
