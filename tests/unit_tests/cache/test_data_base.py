@@ -18,7 +18,7 @@ import pytest
 from nautilus_trader.cache.base import CacheFacade
 from nautilus_trader.core.type import DataType
 from nautilus_trader.model.currencies import USD
-from nautilus_trader.model.data import GenericData
+from nautilus_trader.model.data.base import GenericData
 from nautilus_trader.model.enums import PriceType
 from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.trading.filters import NewsEvent
@@ -56,7 +56,7 @@ class TestDataType:
         assert data_type1 != data_type2
         assert data_type1 != data_type2
         assert data_type1 != data_type3
-        assert type(hash(data_type1)) == int
+        assert isinstance(hash(data_type1), int)
 
     def test_data_type_as_key_in_dict(self):
         # Arrange

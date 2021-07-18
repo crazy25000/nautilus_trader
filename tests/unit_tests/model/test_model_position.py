@@ -26,8 +26,9 @@ from nautilus_trader.model.currencies import USD
 from nautilus_trader.model.currencies import USDT
 from nautilus_trader.model.enums import LiquiditySide
 from nautilus_trader.model.enums import OrderSide
+from nautilus_trader.model.enums import OrderType
 from nautilus_trader.model.enums import PositionSide
-from nautilus_trader.model.events import OrderFilled
+from nautilus_trader.model.events.order import OrderFilled
 from nautilus_trader.model.identifiers import ClientOrderId
 from nautilus_trader.model.identifiers import ExecutionId
 from nautilus_trader.model.identifiers import PositionId
@@ -52,6 +53,7 @@ ETHUSD_BITMEX = TestInstrumentProvider.ethusd_bitmex()
 class TestPosition:
     def setup(self):
         # Fixture Setup
+        self.trader_id = TestStubs.trader_id()
         self.account_id = TestStubs.account_id()
         self.order_factory = OrderFactory(
             trader_id=TraderId("TESTER-000"),
@@ -176,7 +178,7 @@ class TestPosition:
         # Assert
         assert position.symbol == AUDUSD_SIM.id.symbol
         assert position.venue == AUDUSD_SIM.id.venue
-        assert not position.is_opposite_side(fill.order_side)
+        assert not position.is_opposite_side(fill.side)
         assert not position != position  # Equality operator test
         assert position.from_order == ClientOrderId("O-19700101-000000-000-001-1")
         assert position.quantity == Quantity.from_int(100000)
@@ -364,14 +366,16 @@ class TestPosition:
         position = Position(instrument=AUDUSD_SIM, fill=fill1)
 
         fill2 = OrderFilled(
+            self.trader_id,
+            StrategyId("S-001"),
+            order.instrument_id,
             self.account_id,
             order.client_order_id,
             VenueOrderId("2"),
             ExecutionId("E2"),
             PositionId("T123456"),
-            StrategyId("S-001"),
-            order.instrument_id,
             OrderSide.SELL,
+            OrderType.MARKET,
             order.quantity,
             Price.from_str("1.00011"),
             AUDUSD_SIM.quote_currency,
@@ -388,7 +392,7 @@ class TestPosition:
         position.apply(fill2)
 
         # Assert
-        assert position.is_opposite_side(fill2.order_side)
+        assert position.is_opposite_side(fill2.side)
         assert position.quantity == Quantity.zero()
         assert position.side == PositionSide.FLAT
         assert position.ts_opened_ns == 1_000_000_000

@@ -38,39 +38,32 @@ script = "build.py"
 generate-setup-file = false
 
 [tool.poetry.dependencies]
-betfairlightweight = {extras = ["speed"], version = "^2.12.1", optional = true}
-ccxt = { version = "^1.52.59", optional = true }
+python = "^3.7.9"
 cython = "^3.0.0a8"
-dask = "*"
 empyrical = "^0.5.5"
 frozendict = "^2.0.3"
-fsspec = "^2021.6.1"
-ib_insync = { version = "^0.9.66", optional = true }
+fsspec = "^2021.7.0"
 msgpack = "^1.0.2"
 mypy = "^0.910"
-numpy = "^1.21.0"
-numpydoc = { version = "^1.1.0", optional = true }
-oandapyV20 = { version = "^0.6.3" }
+numpy = "1.20.0"  # Pinned for AT
 orjson = "3.5.1"  # Pinned at 3.5.1 due betfairlightweight
-pandas = "1.2.5"  # Pinned at 1.2.5 due to bugs
+pandas = "1.2.5"  # Pinned for AT
 psutil = "^5.8.0"
 pyarrow = "^4.0.1"
-python = "^3.7.9"
 pytz = "^2021.1"
 redis = "^3.5.3"
 scipy = "1.6.1"  # Pinned at 1.6.1 due Python 3.7.9
 tabulate = "^0.8.9"
 tqdm = "^4.61.2"
-uvloop = { version = "^0.15.2", markers = "sys_platform != 'win32'" }
+uvloop = { version = "^0.15.3", markers = "sys_platform != 'win32'" }
+betfairlightweight = {extras = ["speed"], version = "^2.12.1", optional = true}
+ccxt = { version = "^1.53.20", optional = true }
+ib_insync = { version = "^0.9.66", optional = true }
 
 [tool.poetry.dev-dependencies]
 # coverage 5.x is currently broken for Cython
 # https://github.com/cython/cython/issues/3515
-black = "^21.6b0"
 coverage = "4.5.4"  # Pinned at 4.5.4 due Cython 3.0.0a8
-flake8 = "^3.9.2"
-isort = "^5.9.2"
-mypy = "^0.910"
 nox = "^2021.6.12"
 pre-commit = "^2.13.0"
 pytest = "^6.2.4"
@@ -79,16 +72,15 @@ pytest-benchmark = "^3.4.1"
 pytest-cov = "2.10.1"  # Pinned at 2.10.1 due coverage 4.5.4
 pytest-mock = "^3.6.1"
 pytest-xdist = { version = "^2.3.0", extras = ["psutil"] }
-sphinx = { version = "^4.0.2", optional = true }
+numpydoc = { version = "^1.1.0", optional = true }
+sphinx = { version = "^4.1.1", optional = true }
 sphinx-rtd-theme = { version = "^0.5.1", optional = true }
 
 [tool.poetry.extras]
 betfair = ["betfairlightweight"]
 ccxt = ["ccxt"]
-distributed = ["distributed", "bokeh", "dask"]
 docs = ["numpydoc", "sphinx", "sphinx-rtd-theme"]
 ib = ["ib_insync"]
-oanda = ["oandapyV20"]
 
 ##########################################################
 # Test configs                                           #
@@ -108,12 +100,12 @@ filterwarnings = [
 ##########################################################
 [tool.isort]
 src_paths = [
-    "build.py",
     "examples",
     "nautilus_trader",
-    "noxfile.py",
     "scripts",
     "tests",
+    "build.py",
+    "noxfile.py",
 ]
 combine_as_imports = true
 ensure_newline_before_comments = true
@@ -125,13 +117,13 @@ known_first_party = ["examples", "nautilus_trader", "tests"]
 known_third_party = ["redis"]
 lexicographical = true
 line_length = 100
+multi_line_output = 3
 lines_after_imports = 2
 lines_between_types = 1
-multi_line_output = 3
 single_line_exclusions = "typing"
 use_parentheses = true
 
 [tool.black]
+target_version = ["py37", "py38", "py39"]
 include = '\.pyi?$'
 line_length = 100
-target_version = ["py37", "py38", "py39"]

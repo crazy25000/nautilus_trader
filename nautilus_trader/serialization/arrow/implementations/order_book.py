@@ -21,11 +21,11 @@ from nautilus_trader.model.enums import BookLevelParser
 from nautilus_trader.model.enums import DeltaType
 from nautilus_trader.model.enums import OrderSide
 from nautilus_trader.model.identifiers import InstrumentId
-from nautilus_trader.model.orderbook.book import OrderBookData
-from nautilus_trader.model.orderbook.book import OrderBookDelta
-from nautilus_trader.model.orderbook.book import OrderBookDeltas
-from nautilus_trader.model.orderbook.book import OrderBookSnapshot
-from nautilus_trader.model.orderbook.order import Order
+from nautilus_trader.model.orderbook.data import Order
+from nautilus_trader.model.orderbook.data import OrderBookData
+from nautilus_trader.model.orderbook.data import OrderBookDelta
+from nautilus_trader.model.orderbook.data import OrderBookDeltas
+from nautilus_trader.model.orderbook.data import OrderBookSnapshot
 
 
 def _parse_delta(delta: OrderBookDelta):
@@ -95,6 +95,9 @@ def deserialize(data: List[Dict]):
             ts_recv_ns=data[1]["ts_recv_ns"],
         )
 
+    def _build_order_book_delta(values):
+        return OrderBookDelta.from_dict(values[0])
+
     def _build_order_book_deltas(values):
         return OrderBookDeltas(
             instrument_id=InstrumentId.from_str(values[0]["instrument_id"]),
@@ -107,11 +110,13 @@ def deserialize(data: List[Dict]):
     assert not set([d["order_side"] for d in data]).difference((None, "BUY", "SELL")), "Wrong sides"
     results = []
     for _, chunk in itertools.groupby(data, key=timestamp_key):
-        chunk = list(chunk)
-        if _is_orderbook_snapshot(values=chunk):
+        chunk = list(chunk)  # type: ignore
+        if _is_orderbook_snapshot(values=chunk):  # type: ignore
             results.append(_build_order_book_snapshot(values=chunk))
-        elif len(chunk) >= 1:
+        elif len(chunk) > 1:  # type: ignore
             results.append(_build_order_book_deltas(values=chunk))
+        else:
+            results.append(_build_order_book_delta(values=chunk))
     return results
 
 
@@ -130,3 +135,8 @@ def timestamp_key(x):
         return x["timestamp_ns"]
     else:
         raise KeyError("Can't find timestamp attribute or key")
+
+
+def order_book_register(func):
+    for cls in OrderBookData.__subclasses__():
+        func(cls, serializer=serialize, deserializer=deserialize, chunk=True)

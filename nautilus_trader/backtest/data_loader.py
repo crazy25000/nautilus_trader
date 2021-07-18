@@ -20,35 +20,26 @@ from itertools import takewhile
 import os
 import pathlib
 import re
-from typing import Generator
+from typing import Callable, Generator
 import warnings
 
 import fsspec
 import orjson
 import pandas as pd
 import pyarrow as pa
-from pyarrow import ArrowInvalid
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
-
-from nautilus_trader.core.type import DataType
-from nautilus_trader.model.data import Data
-from nautilus_trader.model.data import GenericData
-
-
-try:
-    from tqdm import tqdm
-except ImportError:
-    pass
+from tqdm import tqdm
 
 from nautilus_trader.backtest.engine import BacktestEngine
+from nautilus_trader.model.data.base import Data
+from nautilus_trader.model.data.tick import QuoteTick
+from nautilus_trader.model.data.tick import TradeTick
+from nautilus_trader.model.data.venue import InstrumentStatusUpdate
 from nautilus_trader.model.instruments.base import Instrument
-from nautilus_trader.model.orderbook.book import OrderBookDelta
-from nautilus_trader.model.orderbook.book import OrderBookDeltas
-from nautilus_trader.model.orderbook.book import OrderBookSnapshot
-from nautilus_trader.model.tick import QuoteTick
-from nautilus_trader.model.tick import TradeTick
-from nautilus_trader.model.venue import InstrumentStatusUpdate
+from nautilus_trader.model.orderbook.data import OrderBookDelta
+from nautilus_trader.model.orderbook.data import OrderBookDeltas
+from nautilus_trader.model.orderbook.data import OrderBookSnapshot
 from nautilus_trader.serialization.arrow.core import _deserialize
 from nautilus_trader.serialization.arrow.core import _partition_keys
 from nautilus_trader.serialization.arrow.core import _schemas
@@ -72,7 +63,7 @@ class ByteParser:
 
     def __init__(
         self,
-        instrument_provider_update: callable = None,
+        instrument_provider_update: Callable = None,
     ):
         """
         Initialize a new instance of the ``ByteParser`` class.
@@ -90,9 +81,9 @@ class TextParser(ByteParser):
 
     def __init__(
         self,
-        parser: callable,
-        line_preprocessor: callable = None,
-        instrument_provider_update: callable = None,
+        parser: Callable,
+        line_preprocessor: Callable = None,
+        instrument_provider_update: Callable = None,
     ):
         """
         Initialize a new instance of the ``TextParser`` class.
@@ -150,7 +141,7 @@ class TextParser(ByteParser):
                     except TypeError as e:
                         if not e.args[0].startswith("cannot unpack non-iterable"):
                             raise e
-                    yield x
+                        yield x
 
     def process_chunk(self, chunk, instrument_provider):
         for line in map(self.line_preprocessor, chunk.split(b"\n")):
@@ -171,7 +162,7 @@ class CSVParser(TextParser):
 
     def __init__(
         self,
-        parser: callable,
+        parser: Callable,
         line_preprocessor=None,
         instrument_provider_update=None,
     ):
@@ -216,7 +207,7 @@ class ParquetParser(ByteParser):
     def __init__(
         self,
         data_type: str,
-        parser: callable = None,
+        parser: Callable = None,
         instrument_provider_update=None,
     ):
         """
@@ -283,7 +274,6 @@ class DataLoader:
         chunk_size=-1,
         compression="infer",
         instrument_provider=None,
-        file_filter: callable = None,
     ):
         """
         Initialize a new instance of the ``DataLoader`` class.
@@ -306,8 +296,7 @@ class DataLoader:
             If compression is used. Defaults to 'infer' by file extension.
         instrument_provider : InstrumentProvider
             The instrument provider for the loader.
-        file_filter: callable
-            Optional filter to apply to file list (if glob_pattern is not enough)
+
         """
         self._path = path
         self.parser = parser
@@ -323,7 +312,6 @@ class DataLoader:
         self.glob_pattern = glob_pattern
         self.fs = fsspec.filesystem(self.fs_protocol)
         self.instrument_provider = instrument_provider
-        self.file_filter = file_filter or identity
         self.path = sorted(self._resolve_path(path=self._path))
 
     def _resolve_path(self, path: str):
@@ -341,16 +329,12 @@ class DataLoader:
 
     def stream_bytes(self, progress=False):
         path = self.path if not progress else tqdm(self.path)
-        for fn in filter(self.file_filter, path):
+        for fn in path:
             with fsspec.open(f"{self.fs_protocol}://{fn}", compression=self.compression) as f:
                 yield NewFile(fn)
                 data = 1
                 while data:
-                    try:
-                        data = f.read(self.chunk_size)
-                    except OSError as e:
-                        print(f"ERR file: {fn} ({e}), skipping")
-                        break
+                    data = f.read(self.chunk_size)
                     yield data
                     yield None  # this is a chunk
         yield EOStream()
@@ -383,7 +367,7 @@ class DataCatalog:
     Provides a searchable data catalogue.
     """
 
-    def __init__(self, path: str, fs_protocol: str = "file"):
+    def __init__(self, path=None, fs_protocol=None):
         """
         Initialize a new instance of the ``DataCatalog`` class.
 
@@ -395,18 +379,11 @@ class DataCatalog:
             The file system protocol to use.
 
         """
-        self.fs = fsspec.filesystem(fs_protocol)
-        self.path = pathlib.Path(path)
-        self._processed_files_fn = str(self.path / ".processed_raw_files.json")
-
-    @classmethod
-    def from_env(cls):
-        return cls.from_uri(uri=os.environ["NAUTILUS_CATALOG"])
-
-    @classmethod
-    def from_uri(cls, uri):
-        protocol, path = uri.split("://")
-        return cls(path=path, fs_protocol=protocol)
+        self.fs = fsspec.filesystem(
+            fs_protocol or os.environ.get("NAUTILUS_BACKTEST_FS_PROTOCOL", "file")
+        )
+        self.root = pathlib.Path(path or os.environ["NAUTILUS_BACKTEST_DIR"])
+        self._processed_files_fn = f"{self.root}/.processed_raw_files.json"
 
     # ---- Loading data ---------------------------------------------------------------------------------------- #
 
@@ -484,8 +461,10 @@ class DataCatalog:
 
         for cls in tables:
             for ins_id in tables[cls]:
-                name = f"{class_to_filename(cls)}.parquet"
-                fn = self.path.joinpath(name)
+                name = f"{camel_to_snake_case(cls.__name__)}.parquet"
+                if is_custom_data(cls):
+                    name = f"{GENERIC_DATA_PREFIX}{camel_to_snake_case(cls.__name__)}.parquet"
+                fn = self.root.joinpath(name)
 
                 df = pd.DataFrame(tables[cls][ins_id])
 
@@ -502,14 +481,11 @@ class DataCatalog:
 
                 # Load any existing data, drop dupes
                 if not append_only:
-                    if self.fs.exists(str(fn)) or self.fs.isdir(str(fn)):
+                    if self.fs.exists(fn) or self.fs.isdir(str(fn)):
                         existing = self._query(
                             filename=camel_to_snake_case(cls.__name__),
-                            instrument_ids=ins_id
-                            if cls not in Instrument.__subclasses__()
-                            else None,
+                            instrument_ids=ins_id,
                             ts_column=ts_col,
-                            raise_on_empty=False,
                         )
                         if not existing.empty:
                             df = df.append(existing).drop_duplicates()
@@ -519,8 +495,8 @@ class DataCatalog:
                                     "instrument_id"
                                 ], "Only support appending to instrument_id partitions"
                                 # We only want to remove this partition
-                                partition_path = f"instrument_id={clean_key(ins_id)}"
-                                self.fs.rm(str(fn / partition_path), recursive=True)
+                                partition_path = f"/instrument_id={clean_key(ins_id)}"
+                                self.fs.rm(str(fn) + partition_path, recursive=True)
                             else:
                                 self.fs.rm(str(fn), recursive=True)
 
@@ -531,9 +507,9 @@ class DataCatalog:
                         df = df.sort_values(col)
                         break
 
-                df, mappings = clean_partition_cols(df, partition_cols)
-                schema = _schemas.get(cls.__name__)
-                table = pa.Table.from_pandas(df, schema=schema)
+                clean_partition_cols(df, partition_cols)
+
+                table = pa.Table.from_pandas(df, schema=_schemas.get(cls.__name__))
                 metadata_collector = []
                 pq.write_to_dataset(
                     table=table,
@@ -546,18 +522,10 @@ class DataCatalog:
                     **kwargs,
                 )
                 # Write the ``_common_metadata`` parquet file without row groups statistics
-                pq.write_metadata(
-                    table.schema, str(fn / "_common_metadata"), version="2.0", filesystem=self.fs
-                )
+                pq.write_metadata(table.schema, fn / "_common_metadata", version="2.0")
 
                 # Write the ``_metadata`` parquet file with row groups statistics of all files
-                pq.write_metadata(
-                    table.schema, str(fn / "_metadata"), version="2.0", filesystem=self.fs
-                )
-
-                # Write out any partition columns we had to modify due to filesystem requirements
-                if mappings:
-                    self._write_mappings(fn=fn, mappings=mappings)
+                pq.write_metadata(table.schema, fn / "_metadata", version="2.0")
 
             # Save any new processed files
         self._save_processed_raw_files(files=processed_raw_files)
@@ -569,7 +537,7 @@ class DataCatalog:
                 "Are you sure you want to clear the WHOLE BACKTEST CACHE?, if so, call clear_cache(FORCE=True)"
             )
         else:
-            self.fs.rm(self.path, recursive=True)
+            self.fs.rm(self.root, recursive=True)
 
     # ---- BACKTEST ---------------------------------------------------------------------------------------- #
 
@@ -709,7 +677,6 @@ class DataCatalog:
                     as_nautilus=True,
                     start=start_timestamp,
                     end=end_timestamp,
-                    raise_on_empty=False,
                     **kw,
                 )
 
@@ -723,7 +690,6 @@ class DataCatalog:
         start=None,
         end=None,
         ts_column="ts_event_ns",
-        raise_on_empty=True,
     ):
         filters = [filter_expr] if filter_expr is not None else []
         if instrument_ids is not None:
@@ -737,42 +703,15 @@ class DataCatalog:
         if end is not None:
             filters.append(ds.field(ts_column) <= int(pd.Timestamp(end).to_datetime64()))
 
-        path = self.path.joinpath(f"{filename}.parquet")
-        if not (self.fs.exists(str(path)) or self.fs.isdir(str(path))):
-            if raise_on_empty:
-                raise FileNotFoundError
-            else:
-                return pd.DataFrame()
+        path = f"{self.root}/{filename}.parquet/"
+        if not self.fs.exists(path):
+            return
 
-        dataset = ds.dataset(str(path), partitioning="hive", filesystem=self.fs)
-        table = dataset.to_table(filter=combine_filters(*filters))
-        df = table.to_pandas().drop_duplicates()
-        mappings = self._read_mappings(path=path)
-        for col in mappings:
-            df.loc[:, col] = df[col].map({v: k for k, v in mappings[col].items()})
-
-        # TODO (bm) - This should be stored as a dictionary (category) anyway.
+        dataset = ds.dataset(path, partitioning="hive", filesystem=self.fs)
+        df = dataset.to_table(filter=combine_filters(*filters)).to_pandas().drop_duplicates()
         if "instrument_id" in df.columns:
             df = df.astype({"instrument_id": "category"})
-        if df.empty and raise_on_empty:
-            local_vars = dict(locals())
-            kw = [
-                f"{k}={local_vars[k]}"
-                for k in ("filename", "filter_expr", "instrument_ids", "start", "end")
-            ]
-            raise ValueError(f"Data empty for {kw}")
         return df
-
-    def _write_mappings(self, fn, mappings):
-        with self.fs.open(str(fn / "_partition_mappings.json"), "wb") as f:
-            f.write(orjson.dumps(mappings))
-
-    def _read_mappings(self, path):
-        try:
-            with self.fs.open(str(path / "_partition_mappings.json")) as f:
-                return orjson.loads(f.read())
-        except FileNotFoundError:
-            return {}
 
     @staticmethod
     def _make_objects(df, cls):
@@ -780,14 +719,7 @@ class DataCatalog:
             return []
         return _deserialize(cls=cls, chunk=df.to_dict("records"))
 
-    def instruments(
-        self,
-        instrument_type=None,
-        instrument_ids=None,
-        filter_expr=None,
-        as_nautilus=False,
-        **kwargs,
-    ):
+    def instruments(self, instrument_type=None, filter_expr=None, as_nautilus=False, **kwargs):
         if instrument_type is not None:
             assert isinstance(instrument_type, type)
             instrument_types = (instrument_type,)
@@ -796,34 +728,22 @@ class DataCatalog:
 
         dfs = []
         for ins_type in instrument_types:
-            try:
-                df = self._query(
+            dfs.append(
+                self._query(
                     camel_to_snake_case(ins_type.__name__),
                     filter_expr=filter_expr,
-                    instrument_ids=instrument_ids,
-                    raise_on_empty=False,
                     **kwargs,
                 )
-                df = df.drop_duplicates(
-                    [c for c in df.columns if c not in NAUTILUS_TS_COLUMNS], keep="last"
-                )
-                dfs.append(df)
-            except ArrowInvalid as e:
-                # If we're using a `filter_expr` here, there's a good chance this error is using a filter that is
-                # specific to one set of instruments and not the others, so we ignore it. If not; raise
-                if filter_expr is not None:
-                    continue
-                else:
-                    raise e
+            )
 
         if not as_nautilus:
             return pd.concat([df for df in dfs if df is not None])
         else:
             objects = []
             for ins_type, df in zip(instrument_types, dfs):
-                if df is None or (isinstance(df, pd.DataFrame) and df.empty):
+                if df is None:
                     continue
-                objects.extend(self._make_objects(df=df, cls=ins_type))
+                objects.extend(self._make_objects(df=df.drop(["type"], axis=1), cls=ins_type))
             return objects
 
     def instrument_status_events(
@@ -870,43 +790,20 @@ class DataCatalog:
         )
         if not as_nautilus:
             return df
-        return self._make_objects(df=df, cls=OrderBookDeltas)
+        return self._make_objects(df=df, cls=OrderBookDelta)
 
-    def generic_data(self, cls, filter_expr=None, as_nautilus=False, **kwargs):
+    def generic_data(self, name, filter_expr=None, as_nautilus=False, **kwargs):
         df = self._query(
-            filename=class_to_filename(cls),
+            f"{GENERIC_DATA_PREFIX}{name}",
             filter_expr=filter_expr,
             **kwargs,
         )
         if not as_nautilus:
             return df
-        return [
-            GenericData(data_type=DataType(cls), data=d) for d in self._make_objects(df=df, cls=cls)
-        ]
-
-    def query(self, cls, filter_expr=None, instrument_ids=None, as_nautilus=False, **kwargs):
-        name = class_to_filename(cls)
-        if name.startswith(GENERIC_DATA_PREFIX):
-            # Special handling for generic data
-            return self.generic_data(
-                cls=cls,
-                filter_expr=filter_expr,
-                instrument_ids=instrument_ids,
-                as_nautilus=as_nautilus,
-                **kwargs,
-            )
-        df = self._query(
-            filename=name,
-            filter_expr=filter_expr,
-            instrument_ids=instrument_ids,
-            **kwargs,
-        )
-        if not as_nautilus:
-            return df
-        return self._make_objects(df=df, cls=cls)
+        return self._make_objects(df=df, cls=OrderBookDelta)
 
     def list_data_types(self):
-        return [p.stem for p in self.path.glob("*.parquet")]
+        return [p.stem for p in self.root.glob("*.parquet")]
 
     def list_generic_data_types(self):
         data_types = self.list_data_types()
@@ -920,7 +817,7 @@ class DataCatalog:
         assert isinstance(cls_type, type), "`cls_type` should be type, ie TradeTick"
         prefix = GENERIC_DATA_PREFIX if is_custom_data(cls_type) else ""
         name = prefix + camel_to_snake_case(cls_type.__name__)
-        dataset = pq.ParquetDataset(self.path / f"{name}.parquet", filesystem=self.fs)
+        dataset = pq.ParquetDataset(self.root / f"{name}.parquet")
         partitions = {}
         for level in dataset.partitions.levels:
             partitions[level.name] = level.keys
@@ -960,11 +857,10 @@ def is_custom_data(cls):
         # This object is defined outside of nautilus, definitely custom
         return True
     else:
-        is_data_subclass = issubclass(cls, Data)
-        is_nautilus_builtin = any(
-            (cls.__module__.startswith(p) for p in ("nautilus_trader.model",))
+        nautilus_builtins = ("nautilus_trader.models",)
+        return cls in Data.__subclasses__() and not any(
+            (cls.__name__.startswith(p) for p in nautilus_builtins)
         )
-        return is_data_subclass and not is_nautilus_builtin
 
 
 def identity(x):
@@ -975,23 +871,19 @@ INVALID_WINDOWS_CHARS = r'<>:"/\|?* '
 
 
 def clean_partition_cols(df, partition_cols=None):
-    mappings = {}
     for col in partition_cols or []:
         values = list(map(str, df[col].unique()))
         invalid_values = {val for val in values if any(x in val for x in INVALID_WINDOWS_CHARS)}
         if invalid_values:
             if col == "instrument_id":
                 # We have control over how instrument_ids are retrieved from the cache, so we can do this replacement
-                val_map = {k: clean_key(k) for k in values}
-                mappings[col] = val_map
-                df.loc[:, col] = df[col].map(val_map)
-
+                df.loc[:, col] = df[col].map({k: clean_key(k) for k in values})
             else:
                 # We would be arbitrarily replacing values here which could break queries, we should not do this.
                 raise ValueError(
                     f"Some values in partition column [{col}] contain invalid characters: {invalid_values}"
                 )
-    return df, mappings
+    return df
 
 
 def clean_key(s):
@@ -999,13 +891,6 @@ def clean_key(s):
         if ch in s:
             s = s.replace(ch, "-")
     return s
-
-
-def class_to_filename(cls):
-    name = f"{camel_to_snake_case(cls.__name__)}"
-    if is_custom_data(cls):
-        name = f"{GENERIC_DATA_PREFIX}{camel_to_snake_case(cls.__name__)}"
-    return name
 
 
 # TODO - https://github.com/leonidessaguisagjr/filehash ?

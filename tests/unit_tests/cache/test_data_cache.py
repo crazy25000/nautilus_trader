@@ -17,10 +17,12 @@ from decimal import Decimal
 
 import pytest
 
-from nautilus_trader.model.bar import Bar
 from nautilus_trader.model.currencies import AUD
 from nautilus_trader.model.currencies import JPY
 from nautilus_trader.model.currencies import USD
+from nautilus_trader.model.data.bar import Bar
+from nautilus_trader.model.data.tick import QuoteTick
+from nautilus_trader.model.data.tick import TradeTick
 from nautilus_trader.model.enums import AggressorSide
 from nautilus_trader.model.enums import BookLevel
 from nautilus_trader.model.enums import PriceType
@@ -28,9 +30,7 @@ from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.objects import Price
 from nautilus_trader.model.objects import Quantity
 from nautilus_trader.model.orderbook.book import L2OrderBook
-from nautilus_trader.model.orderbook.book import OrderBookSnapshot
-from nautilus_trader.model.tick import QuoteTick
-from nautilus_trader.model.tick import TradeTick
+from nautilus_trader.model.orderbook.data import OrderBookSnapshot
 from tests.test_kit.providers import TestInstrumentProvider
 from tests.test_kit.stubs import TestStubs
 

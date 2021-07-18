@@ -22,19 +22,20 @@ from nautilus_trader.core.type import DataType
 from nautilus_trader.data.client import DataClient
 from nautilus_trader.data.client import MarketDataClient
 from nautilus_trader.data.engine import DataEngine
-from nautilus_trader.model.bar import Bar
 from nautilus_trader.model.currencies import USD
-from nautilus_trader.model.data import GenericData
+from nautilus_trader.model.data.bar import Bar
+from nautilus_trader.model.data.base import GenericData
+from nautilus_trader.model.data.tick import QuoteTick
+from nautilus_trader.model.data.tick import TradeTick
 from nautilus_trader.model.enums import AggressorSide
 from nautilus_trader.model.enums import BookLevel
 from nautilus_trader.model.identifiers import ClientId
 from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.objects import Price
 from nautilus_trader.model.objects import Quantity
-from nautilus_trader.model.orderbook.book import OrderBookDeltas
-from nautilus_trader.model.orderbook.book import OrderBookSnapshot
-from nautilus_trader.model.tick import QuoteTick
-from nautilus_trader.model.tick import TradeTick
+from nautilus_trader.model.orderbook.data import OrderBookDeltas
+from nautilus_trader.model.orderbook.data import OrderBookSnapshot
+from nautilus_trader.msgbus.message_bus import MessageBus
 from nautilus_trader.trading.filters import NewsEvent
 from nautilus_trader.trading.filters import NewsImpact
 from nautilus_trader.trading.portfolio import Portfolio
@@ -54,9 +55,15 @@ class TestDataClient:
         self.uuid_factory = UUIDFactory()
         self.logger = Logger(self.clock)
 
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
+
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -170,9 +177,15 @@ class TestMarketDataClient:
         self.uuid_factory = UUIDFactory()
         self.logger = Logger(self.clock)
 
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
+
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,

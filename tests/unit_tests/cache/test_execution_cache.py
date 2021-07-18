@@ -16,11 +16,14 @@
 from decimal import Decimal
 
 from nautilus_trader.backtest.engine import BacktestEngine
+from nautilus_trader.cache.cache import Cache
 from nautilus_trader.common.clock import TestClock
 from nautilus_trader.common.logging import Logger
-from nautilus_trader.model.bar import BarSpecification
+from nautilus_trader.data.engine import DataEngine
+from nautilus_trader.execution.engine import ExecutionEngine
 from nautilus_trader.model.currencies import USD
 from nautilus_trader.model.currency import Currency
+from nautilus_trader.model.data.bar import BarSpecification
 from nautilus_trader.model.enums import AccountType
 from nautilus_trader.model.enums import BarAggregation
 from nautilus_trader.model.enums import CurrencyType
@@ -31,14 +34,16 @@ from nautilus_trader.model.enums import VenueType
 from nautilus_trader.model.identifiers import ClientOrderId
 from nautilus_trader.model.identifiers import PositionId
 from nautilus_trader.model.identifiers import StrategyId
-from nautilus_trader.model.identifiers import TraderId
 from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.identifiers import VenueOrderId
 from nautilus_trader.model.objects import Money
 from nautilus_trader.model.objects import Price
 from nautilus_trader.model.objects import Quantity
 from nautilus_trader.model.position import Position
+from nautilus_trader.msgbus.message_bus import MessageBus
+from nautilus_trader.risk.engine import RiskEngine
 from nautilus_trader.trading.account import Account
+from nautilus_trader.trading.portfolio import Portfolio
 from nautilus_trader.trading.strategy import TradingStrategy
 from tests.test_kit.providers import TestDataProvider
 from tests.test_kit.providers import TestInstrumentProvider
@@ -57,17 +62,59 @@ class TestCache:
         clock = TestClock()
         logger = Logger(clock)
 
-        self.trader_id = TraderId("TESTER-000")
+        self.trader_id = TestStubs.trader_id()
         self.account_id = TestStubs.account_id()
 
+        self.msgbus = MessageBus(
+            clock=clock,
+            logger=logger,
+        )
+
+        self.cache = Cache(
+            database=None,
+            logger=logger,
+        )
+
+        self.portfolio = Portfolio(
+            msgbus=self.msgbus,
+            cache=self.cache,
+            clock=clock,
+            logger=logger,
+        )
+
+        self.data_engine = DataEngine(
+            portfolio=self.portfolio,
+            cache=self.cache,
+            clock=clock,
+            logger=logger,
+        )
+
+        self.exec_engine = ExecutionEngine(
+            trader_id=self.trader_id,
+            msgbus=self.msgbus,
+            cache=self.cache,
+            clock=clock,
+            logger=logger,
+        )
+
+        self.risk_engine = RiskEngine(
+            exec_engine=self.exec_engine,
+            msgbus=self.msgbus,
+            cache=self.cache,
+            clock=clock,
+            logger=logger,
+        )
+
         self.strategy = TradingStrategy(order_id_tag="001")
-        self.strategy.register_trader(
-            TraderId("TESTER-000"),
+        self.strategy.register(
+            self.trader_id,
+            self.msgbus,
+            self.portfolio,
+            self.data_engine,
+            self.risk_engine,
             clock,
             logger,
         )
-
-        self.cache = TestStubs.cache()
 
     def test_cache_currencies_with_no_currencies(self):
         # Arrange
@@ -360,6 +407,51 @@ class TestCache:
         # Assert
         assert result == position
 
+    def test_update_order_for_submitted_order(self):
+        # Arrange
+        order = self.strategy.order_factory.stop_market(
+            AUDUSD_SIM.id,
+            OrderSide.BUY,
+            Quantity.from_int(100000),
+            Price.from_str("1.00000"),
+        )
+
+        position_id = PositionId("P-1")
+        self.cache.add_order(order, position_id)
+
+        order.apply(TestStubs.event_order_submitted(order))
+
+        # Act
+        self.cache.update_order(order)
+
+        # Assert
+        assert self.cache.order_exists(order.client_order_id)
+        assert order.client_order_id in self.cache.client_order_ids()
+        assert order in self.cache.orders()
+        assert order in self.cache.orders_inflight()
+        assert order in self.cache.orders_inflight(instrument_id=order.instrument_id)
+        assert order in self.cache.orders_inflight(strategy_id=self.strategy.id)
+        assert order in self.cache.orders_inflight(
+            instrument_id=order.instrument_id, strategy_id=self.strategy.id
+        )
+        assert order not in self.cache.orders_working()
+        assert order not in self.cache.orders_working(instrument_id=order.instrument_id)
+        assert order not in self.cache.orders_working(strategy_id=self.strategy.id)
+        assert order not in self.cache.orders_working(
+            instrument_id=order.instrument_id, strategy_id=self.strategy.id
+        )
+        assert order not in self.cache.orders_completed()
+        assert order not in self.cache.orders_completed(instrument_id=order.instrument_id)
+        assert order not in self.cache.orders_completed(strategy_id=self.strategy.id)
+        assert order not in self.cache.orders_completed(
+            instrument_id=order.instrument_id, strategy_id=self.strategy.id
+        )
+
+        assert self.cache.orders_inflight_count() == 1
+        assert self.cache.orders_working_count() == 0
+        assert self.cache.orders_completed_count() == 0
+        assert self.cache.orders_total_count() == 1
+
     def test_update_order_for_accepted_order(self):
         # Arrange
         order = self.strategy.order_factory.stop_market(
@@ -390,6 +482,13 @@ class TestCache:
         assert order in self.cache.orders_working(
             instrument_id=order.instrument_id, strategy_id=self.strategy.id
         )
+        assert order not in self.cache.orders_inflight()
+        assert order not in self.cache.orders_inflight()
+        assert order not in self.cache.orders_inflight(instrument_id=order.instrument_id)
+        assert order not in self.cache.orders_inflight(strategy_id=self.strategy.id)
+        assert order not in self.cache.orders_inflight(
+            instrument_id=order.instrument_id, strategy_id=self.strategy.id
+        )
         assert order not in self.cache.orders_completed()
         assert order not in self.cache.orders_completed(instrument_id=order.instrument_id)
         assert order not in self.cache.orders_completed(strategy_id=self.strategy.id)
@@ -397,6 +496,7 @@ class TestCache:
             instrument_id=order.instrument_id, strategy_id=self.strategy.id
         )
 
+        assert self.cache.orders_inflight_count() == 0
         assert self.cache.orders_working_count() == 1
         assert self.cache.orders_completed_count() == 0
         assert self.cache.orders_total_count() == 1
@@ -436,6 +536,12 @@ class TestCache:
         assert order in self.cache.orders_completed(
             instrument_id=order.instrument_id, strategy_id=self.strategy.id
         )
+        assert order not in self.cache.orders_inflight()
+        assert order not in self.cache.orders_inflight(instrument_id=order.instrument_id)
+        assert order not in self.cache.orders_inflight(strategy_id=self.strategy.id)
+        assert order not in self.cache.orders_inflight(
+            instrument_id=order.instrument_id, strategy_id=self.strategy.id
+        )
         assert order not in self.cache.orders_working()
         assert order not in self.cache.orders_working(instrument_id=order.instrument_id)
         assert order not in self.cache.orders_working(strategy_id=self.strategy.id)
@@ -443,6 +549,7 @@ class TestCache:
             instrument_id=order.instrument_id, strategy_id=self.strategy.id
         )
         assert self.cache.venue_order_id(order.client_order_id) == order.venue_order_id
+        assert self.cache.orders_inflight_count() == 0
         assert self.cache.orders_working_count() == 0
         assert self.cache.orders_completed_count() == 1
         assert self.cache.orders_total_count() == 1

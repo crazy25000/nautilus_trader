@@ -106,37 +106,28 @@ class TestCCXTInstrumentProvider:
         # Assert
         assert provider.count == 120  # No exceptions raised
 
-    def test_load_all_async(self):
-        # Fresh isolated loop testing pattern
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    @pytest.mark.asyncio
+    async def test_load_all_async(self):
+        with open(TEST_PATH + "markets.json") as response:
+            markets = json.load(response)
 
-        async def run_test():
-            # Arrange
-            with open(TEST_PATH + "markets.json") as response:
-                markets = json.load(response)
+        with open(TEST_PATH + "currencies.json") as response:
+            currencies = json.load(response)
 
-            with open(TEST_PATH + "currencies.json") as response:
-                currencies = json.load(response)
+        mock_client = MagicMock()
+        mock_client.name = "Binance"
+        mock_client.precisionMode = 2
+        mock_client.markets = markets
+        mock_client.currencies = currencies
 
-            mock_client = MagicMock()
-            mock_client.name = "Binance"
-            mock_client.precisionMode = 2
-            mock_client.markets = markets
-            mock_client.currencies = currencies
+        provider = CCXTInstrumentProvider(client=mock_client)
 
-            provider = CCXTInstrumentProvider(client=mock_client)
+        # Act
+        await provider.load_all_async()
+        await asyncio.sleep(0.5)
 
-            # Act
-            await provider.load_all_async()
-            await asyncio.sleep(0.5)
-
-            # Assert
-            assert provider.count > 0  # No exceptions raised
-
-        loop.run_until_complete(run_test())
-        loop.stop()
-        loop.close()
+        # Assert
+        assert provider.count > 0  # No exceptions raised
 
     def test_get_all_when_not_loaded_returns_empty_dict(self):
         # Arrange
@@ -173,8 +164,8 @@ class TestCCXTInstrumentProvider:
 
         # Assert
         assert len(instruments) > 0
-        assert type(instruments) == dict
-        assert type(next(iter(instruments))) == InstrumentId
+        assert isinstance(instruments, dict)
+        assert isinstance(next(iter(instruments)), InstrumentId)
 
     def test_get_all_when_load_all_is_true_returns_expected_instruments(self):
         # Arrange
@@ -197,8 +188,8 @@ class TestCCXTInstrumentProvider:
 
         # Assert
         assert len(instruments) > 0
-        assert type(instruments) == dict
-        assert type(next(iter(instruments))) == InstrumentId
+        assert isinstance(instruments, dict)
+        assert isinstance(next(iter(instruments)), InstrumentId)
 
     def test_get_btcusdt_when_not_loaded_returns_none(self):
         # Arrange
@@ -238,7 +229,7 @@ class TestCCXTInstrumentProvider:
         instrument = provider.find(instrument_id)
 
         # Assert
-        assert type(instrument) == CurrencySpot
+        assert isinstance(instrument, CurrencySpot)
         assert instrument.asset_class == AssetClass.CRYPTO
         assert instrument.asset_type == AssetType.SPOT
         assert instrument.base_currency == BTC
@@ -265,7 +256,7 @@ class TestCCXTInstrumentProvider:
         currency = provider.currency("BTC")
 
         # Assert
-        assert type(currency) == Currency
+        assert isinstance(currency, Currency)
         assert currency.code == "BTC"
         assert currency.precision == 8
 

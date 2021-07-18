@@ -19,7 +19,6 @@ import pytest
 
 from nautilus_trader.common.clock import LiveClock
 from nautilus_trader.common.logging import LiveLogger
-from nautilus_trader.common.logging import LogLevel
 from nautilus_trader.common.logging import Logger
 from nautilus_trader.common.uuid import UUIDFactory
 from nautilus_trader.live.data_client import LiveDataClient
@@ -28,6 +27,7 @@ from nautilus_trader.live.data_client import LiveMarketDataClient
 from nautilus_trader.live.data_engine import LiveDataEngine
 from nautilus_trader.model.identifiers import ClientId
 from nautilus_trader.model.identifiers import Venue
+from nautilus_trader.msgbus.message_bus import MessageBus
 from nautilus_trader.trading.portfolio import Portfolio
 from tests.test_kit.providers import TestInstrumentProvider
 from tests.test_kit.stubs import TestStubs
@@ -43,24 +43,28 @@ ETHUSDT_BINANCE = TestInstrumentProvider.ethusdt_binance()
 class TestLiveDataClientFactory:
     def test_create_when_not_implemented_raises_not_implemented_error(self):
         # Arrange
-        self.loop = asyncio.new_event_loop()
+        self.loop = asyncio.get_event_loop()
         self.loop.set_debug(True)
-        asyncio.set_event_loop(self.loop)
 
         self.clock = LiveClock()
         self.logger = LiveLogger(self.loop, self.clock)
+
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
+
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
         )
 
-        # Fresh isolated loop testing pattern
-        self.loop = asyncio.new_event_loop()
+        self.loop = asyncio.get_event_loop()
         self.loop.set_debug(True)
-        asyncio.set_event_loop(self.loop)
 
         self.data_engine = LiveDataEngine(
             loop=self.loop,
@@ -86,20 +90,24 @@ class TestLiveDataClientTests:
         # Fixture Setup
         self.clock = LiveClock()
         self.uuid_factory = UUIDFactory()
-        self.logger = Logger(self.clock, level_stdout=LogLevel.DEBUG)
+        self.logger = Logger(self.clock)
+
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
 
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
         )
 
-        # Fresh isolated loop testing pattern
-        self.loop = asyncio.new_event_loop()
+        self.loop = asyncio.get_event_loop()
         self.loop.set_debug(True)
-        asyncio.set_event_loop(self.loop)
 
         self.engine = LiveDataEngine(
             loop=self.loop,
@@ -128,20 +136,24 @@ class TestLiveMarketDataClientTests:
         # Fixture Setup
         self.clock = LiveClock()
         self.uuid_factory = UUIDFactory()
-        self.logger = Logger(self.clock, level_stdout=LogLevel.DEBUG)
+        self.logger = Logger(self.clock)
+
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
 
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
         )
 
-        # Fresh isolated loop testing pattern
-        self.loop = asyncio.new_event_loop()
+        self.loop = asyncio.get_event_loop()
         self.loop.set_debug(True)
-        asyncio.set_event_loop(self.loop)
 
         self.engine = LiveDataEngine(
             loop=self.loop,

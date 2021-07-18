@@ -13,7 +13,6 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from nautilus_trader.cache.cache import Cache
 from nautilus_trader.common.clock import TestClock
 from nautilus_trader.common.factories import OrderFactory
 from nautilus_trader.common.logging import Logger
@@ -27,7 +26,7 @@ from nautilus_trader.model.currencies import USD
 from nautilus_trader.model.currencies import USDT
 from nautilus_trader.model.enums import AccountType
 from nautilus_trader.model.enums import OrderSide
-from nautilus_trader.model.events import AccountState
+from nautilus_trader.model.events.account import AccountState
 from nautilus_trader.model.identifiers import AccountId
 from nautilus_trader.model.identifiers import PositionId
 from nautilus_trader.model.identifiers import StrategyId
@@ -37,6 +36,7 @@ from nautilus_trader.model.objects import Money
 from nautilus_trader.model.objects import Price
 from nautilus_trader.model.objects import Quantity
 from nautilus_trader.model.position import Position
+from nautilus_trader.msgbus.message_bus import MessageBus
 from nautilus_trader.trading.account import Account
 from nautilus_trader.trading.portfolio import Portfolio
 from tests.test_kit.providers import TestInstrumentProvider
@@ -61,21 +61,24 @@ class TestAccount:
             clock=TestClock(),
         )
 
-        cache = Cache(
-            database=None,
+        self.msgbus = MessageBus(
+            clock=clock,
             logger=logger,
         )
 
+        self.cache = TestStubs.cache()
+
         self.portfolio = Portfolio(
-            cache=cache,
+            msgbus=self.msgbus,
+            cache=self.cache,
             clock=clock,
             logger=logger,
         )
 
         self.exec_engine = ExecutionEngine(
-            portfolio=self.portfolio,
             trader_id=trader_id,
-            cache=cache,
+            msgbus=self.msgbus,
+            cache=self.cache,
             clock=clock,
             logger=logger,
         )
@@ -110,8 +113,8 @@ class TestAccount:
 
         # Assert
         assert account.id == AccountId("SIM", "001")
-        assert str(account) == "Account(id=SIM-001)"
-        assert repr(account) == "Account(id=SIM-001)"
+        assert str(account) == "Account(id=SIM-001, type=CASH, base=USD)"
+        assert repr(account) == "Account(id=SIM-001, type=CASH, base=USD)"
         assert isinstance(hash(account), int)
         assert account == account
         assert not account != account
@@ -692,7 +695,7 @@ class TestAccount:
 
         fill = TestStubs.event_order_filled(
             order,
-            instrument=BTCUSDT_BINANCE,
+            instrument=AUDUSD_SIM,
             position_id=PositionId("P-123456"),
             strategy_id=StrategyId("S-001"),
             last_px=Price.from_str("0.80000"),

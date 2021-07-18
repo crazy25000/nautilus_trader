@@ -26,11 +26,13 @@ from nautilus_trader.common.logging import Logger
 from nautilus_trader.common.uuid import UUIDFactory
 from nautilus_trader.data.engine import DataEngine
 from nautilus_trader.execution.engine import ExecutionEngine
-from nautilus_trader.model.commands import CancelOrder
-from nautilus_trader.model.commands import UpdateOrder
+from nautilus_trader.model.commands.trading import CancelOrder
+from nautilus_trader.model.commands.trading import UpdateOrder
 from nautilus_trader.model.currencies import BTC
 from nautilus_trader.model.currencies import JPY
 from nautilus_trader.model.currencies import USD
+from nautilus_trader.model.data.tick import QuoteTick
+from nautilus_trader.model.data.tick import TradeTick
 from nautilus_trader.model.enums import AccountType
 from nautilus_trader.model.enums import AggressorSide
 from nautilus_trader.model.enums import BookLevel
@@ -41,21 +43,19 @@ from nautilus_trader.model.enums import OrderState
 from nautilus_trader.model.enums import PositionSide
 from nautilus_trader.model.enums import TimeInForce
 from nautilus_trader.model.enums import VenueType
-from nautilus_trader.model.events import OrderAccepted
-from nautilus_trader.model.events import OrderRejected
+from nautilus_trader.model.events.order import OrderAccepted
+from nautilus_trader.model.events.order import OrderRejected
 from nautilus_trader.model.identifiers import AccountId
 from nautilus_trader.model.identifiers import ClientOrderId
 from nautilus_trader.model.identifiers import PositionId
 from nautilus_trader.model.identifiers import StrategyId
-from nautilus_trader.model.identifiers import TraderId
 from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.identifiers import VenueOrderId
 from nautilus_trader.model.objects import Money
 from nautilus_trader.model.objects import Price
 from nautilus_trader.model.objects import Quantity
 from nautilus_trader.model.orderbook.book import OrderBook
-from nautilus_trader.model.tick import QuoteTick
-from nautilus_trader.model.tick import TradeTick
+from nautilus_trader.msgbus.message_bus import MessageBus
 from nautilus_trader.risk.engine import RiskEngine
 from nautilus_trader.trading.portfolio import Portfolio
 from tests.test_kit.mocks import MockStrategy
@@ -77,9 +77,15 @@ class TestSimulatedExchange:
         self.uuid_factory = UUIDFactory()
         self.logger = Logger(self.clock)
 
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
+
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -93,12 +99,12 @@ class TestSimulatedExchange:
             config={"use_previous_close": False},  # To correctly reproduce historical data bars
         )
 
-        self.trader_id = TraderId("TESTER-000")
+        self.trader_id = TestStubs.trader_id()
         self.account_id = AccountId("SIM", "001")
 
         self.exec_engine = ExecutionEngine(
-            portfolio=self.portfolio,
             trader_id=self.trader_id,
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -106,7 +112,7 @@ class TestSimulatedExchange:
 
         self.risk_engine = RiskEngine(
             exec_engine=self.exec_engine,
-            portfolio=self.portfolio,
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -142,7 +148,6 @@ class TestSimulatedExchange:
         self.data_engine.cache.add_instrument(AUDUSD_SIM)
         self.data_engine.cache.add_instrument(USDJPY_SIM)
 
-        self.exec_engine.register_risk_engine(self.risk_engine)
         self.exec_engine.register_client(self.exec_client)
         self.exchange.register_client(self.exec_client)
 
@@ -152,16 +157,18 @@ class TestSimulatedExchange:
 
         # Create mock strategy
         self.strategy = MockStrategy(bar_type=TestStubs.bartype_usdjpy_1min_bid())
-        self.strategy.register_trader(
+        self.strategy.register(
             self.trader_id,
+            self.msgbus,
+            self.portfolio,
+            self.data_engine,
+            self.risk_engine,
             self.clock,
             self.logger,
         )
 
-        self.data_engine.register_strategy(self.strategy)
-        self.exec_engine.register_strategy(self.strategy)
-
         # Start components
+        self.exchange.reset()
         self.data_engine.start()
         self.exec_engine.start()
         self.strategy.start()
@@ -272,8 +279,8 @@ class TestSimulatedExchange:
 
         # Assert
         assert order.state == OrderState.ACCEPTED
-        assert self.strategy.object_storer.count == 2
-        assert isinstance(self.strategy.object_storer.get_store()[1], OrderAccepted)
+        assert self.strategy.object_storer.count == 3
+        assert isinstance(self.strategy.object_storer.get_store()[2], OrderAccepted)
 
     def test_submit_sell_limit_order_with_no_market_accepts_order(self):
         # Arrange
@@ -289,8 +296,8 @@ class TestSimulatedExchange:
 
         # Assert
         assert order.state == OrderState.ACCEPTED
-        assert self.strategy.object_storer.count == 2
-        assert isinstance(self.strategy.object_storer.get_store()[1], OrderAccepted)
+        assert self.strategy.object_storer.count == 3
+        assert isinstance(self.strategy.object_storer.get_store()[2], OrderAccepted)
 
     def test_submit_buy_market_order_with_no_market_rejects_order(self):
         # Arrange
@@ -305,8 +312,8 @@ class TestSimulatedExchange:
 
         # Assert
         assert order.state == OrderState.REJECTED
-        assert self.strategy.object_storer.count == 2
-        assert isinstance(self.strategy.object_storer.get_store()[1], OrderRejected)
+        assert self.strategy.object_storer.count == 3
+        assert isinstance(self.strategy.object_storer.get_store()[2], OrderRejected)
 
     def test_submit_sell_market_order_with_no_market_rejects_order(self):
         # Arrange
@@ -321,8 +328,8 @@ class TestSimulatedExchange:
 
         # Assert
         assert order.state == OrderState.REJECTED
-        assert self.strategy.object_storer.count == 2
-        assert isinstance(self.strategy.object_storer.get_store()[1], OrderRejected)
+        assert self.strategy.object_storer.count == 3
+        assert isinstance(self.strategy.object_storer.get_store()[2], OrderRejected)
 
     def test_submit_order_with_invalid_price_gets_rejected(self):
         # Arrange: Prepare market
@@ -1151,9 +1158,9 @@ class TestSimulatedExchange:
 
         self.strategy.submit_order(top_up_order, position_id)
         self.strategy.submit_order(reduce_order, position_id)
-        fill_event1 = self.strategy.object_storer.get_store()[1]
-        fill_event2 = self.strategy.object_storer.get_store()[4]
-        fill_event3 = self.strategy.object_storer.get_store()[7]
+        fill_event1 = self.strategy.object_storer.get_store()[2]
+        fill_event2 = self.strategy.object_storer.get_store()[6]
+        fill_event3 = self.strategy.object_storer.get_store()[10]
 
         # Assert
         assert order.state == OrderState.FILLED
@@ -1886,9 +1893,15 @@ class TestBitmexExchange:
         self.uuid_factory = UUIDFactory()
         self.logger = Logger(self.clock)
 
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
+
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -1902,12 +1915,12 @@ class TestBitmexExchange:
             config={"use_previous_close": False},  # To correctly reproduce historical data bars
         )
 
-        self.trader_id = TraderId("TESTER-000")
+        self.trader_id = TestStubs.trader_id()
         self.account_id = AccountId("BITMEX", "001")
 
         self.exec_engine = ExecutionEngine(
-            portfolio=self.portfolio,
             trader_id=self.trader_id,
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -1915,7 +1928,7 @@ class TestBitmexExchange:
 
         self.risk_engine = RiskEngine(
             exec_engine=self.exec_engine,
-            portfolio=self.portfolio,
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -1949,21 +1962,24 @@ class TestBitmexExchange:
 
         # Wire up components
         self.data_engine.cache.add_instrument(XBTUSD_BITMEX)
-        self.exec_engine.register_risk_engine(self.risk_engine)
+
         self.exec_engine.register_client(self.exec_client)
         self.exchange.register_client(self.exec_client)
 
         self.exec_engine.cache.add_instrument(XBTUSD_BITMEX)
 
         self.strategy = MockStrategy(bar_type=TestStubs.bartype_btcusdt_binance_100tick_last())
-        self.strategy.register_trader(
+        self.strategy.register(
             self.trader_id,
+            self.msgbus,
+            self.portfolio,
+            self.data_engine,
+            self.risk_engine,
             self.clock,
             self.logger,
         )
 
-        self.data_engine.register_strategy(self.strategy)
-        self.exec_engine.register_strategy(self.strategy)
+        self.exchange.reset()
         self.data_engine.start()
         self.exec_engine.start()
         self.strategy.start()
@@ -2015,10 +2031,10 @@ class TestBitmexExchange:
         self.portfolio.update_tick(quote2)
 
         # Assert
-        assert self.strategy.object_storer.get_store()[1].liquidity_side == LiquiditySide.TAKER
-        assert self.strategy.object_storer.get_store()[5].liquidity_side == LiquiditySide.MAKER
-        assert self.strategy.object_storer.get_store()[1].commission == Money(0.00652543, BTC)
-        assert self.strategy.object_storer.get_store()[5].commission == Money(-0.00217552, BTC)
+        assert self.strategy.object_storer.get_store()[2].liquidity_side == LiquiditySide.TAKER
+        assert self.strategy.object_storer.get_store()[7].liquidity_side == LiquiditySide.MAKER
+        assert self.strategy.object_storer.get_store()[2].commission == Money(0.00652543, BTC)
+        assert self.strategy.object_storer.get_store()[7].commission == Money(-0.00217552, BTC)
 
 
 class TestOrderBookExchange:
@@ -2028,9 +2044,15 @@ class TestOrderBookExchange:
         self.uuid_factory = UUIDFactory()
         self.logger = Logger(self.clock)
 
+        self.msgbus = MessageBus(
+            clock=self.clock,
+            logger=self.logger,
+        )
+
         self.cache = TestStubs.cache()
 
         self.portfolio = Portfolio(
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -2044,12 +2066,12 @@ class TestOrderBookExchange:
             config={"use_previous_close": False},  # To correctly reproduce historical data bars
         )
 
-        self.trader_id = TraderId("TESTER-000")
+        self.trader_id = TestStubs.trader_id()
         self.account_id = AccountId("SIM", "001")
 
         self.exec_engine = ExecutionEngine(
-            portfolio=self.portfolio,
             trader_id=self.trader_id,
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -2057,7 +2079,7 @@ class TestOrderBookExchange:
 
         self.risk_engine = RiskEngine(
             exec_engine=self.exec_engine,
-            portfolio=self.portfolio,
+            msgbus=self.msgbus,
             cache=self.cache,
             clock=self.clock,
             logger=self.logger,
@@ -2101,19 +2123,22 @@ class TestOrderBookExchange:
                 level=BookLevel.L2,
             )
         )
-        self.exec_engine.register_risk_engine(self.risk_engine)
+
         self.exec_engine.register_client(self.exec_client)
         self.exchange.register_client(self.exec_client)
 
         self.strategy = MockStrategy(bar_type=TestStubs.bartype_usdjpy_1min_bid())
-        self.strategy.register_trader(
+        self.strategy.register(
             self.trader_id,
+            self.msgbus,
+            self.portfolio,
+            self.data_engine,
+            self.risk_engine,
             self.clock,
             self.logger,
         )
 
-        self.data_engine.register_strategy(self.strategy)
-        self.exec_engine.register_strategy(self.strategy)
+        self.exchange.reset()
         self.data_engine.start()
         self.exec_engine.start()
         self.strategy.start()

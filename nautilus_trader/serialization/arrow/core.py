@@ -17,9 +17,6 @@ from typing import Callable, Dict, Optional
 
 import pyarrow as pa
 
-from nautilus_trader.model.instruments.base import Instrument
-from nautilus_trader.model.orderbook.book import OrderBookData
-from nautilus_trader.serialization.arrow.schema import NAUTILUS_PARQUET_SCHEMA
 from nautilus_trader.serialization.base import get_from_dict
 from nautilus_trader.serialization.base import get_to_dict
 
@@ -33,8 +30,8 @@ _schemas = {}
 
 def register_parquet(
     cls_type,
-    serializer: Optional[callable] = None,
-    deserializer: Optional[callable] = None,
+    serializer: Optional[Callable] = None,
+    deserializer: Optional[Callable] = None,
     schema: Optional[pa.Schema] = None,
     partition_keys=None,
     chunk=None,
@@ -55,9 +52,9 @@ def register_parquet(
     assert isinstance(
         cls_type, type
     ), f"`name` should be <str> (i.e. Class.__name__) not {type(cls_type)}: {cls_type}"
-    assert serializer is None or isinstance(serializer, Callable), "Serializer must be callable"
+    assert serializer is None or isinstance(serializer, Callable), "Serializer must be callable"  # type: ignore
     assert deserializer is None or isinstance(
-        deserializer, Callable
+        deserializer, Callable  # type: ignore
     ), "Deserializer must be callable"
     assert schema is None or isinstance(schema, pa.Schema), "partition_keys must be tuple"
     assert partition_keys is None or isinstance(
@@ -111,7 +108,7 @@ def _deserialize(cls, chunk):
     if not isinstance(chunk, list):
         chunk = [chunk]
     if name in _PARQUET_OBJECT_FROM_DICT_MAP:
-        if _chunk.get(name, False):
+        if _chunk[name]:
             return _PARQUET_OBJECT_FROM_DICT_MAP[name](chunk)
         else:
             return [_PARQUET_OBJECT_FROM_DICT_MAP[name](c) for c in chunk]
@@ -168,24 +165,7 @@ def _deserialize(cls, chunk):
 
 
 # Default nautilus implementations
-from nautilus_trader.serialization.arrow.implementations.order_book import (
-    deserialize as ob_deserialize,
-)
-from nautilus_trader.serialization.arrow.implementations.order_book import serialize as ob_serialize
+from nautilus_trader.serialization.arrow.implementations.order_book import order_book_register
 
 
-for cls in OrderBookData.__subclasses__():
-    register_parquet(cls, serializer=ob_serialize, deserializer=ob_deserialize, chunk=True)
-
-
-for cls in Instrument.__subclasses__():
-    register_parquet(
-        cls,
-        # serializer=partial(instrument_to_dict, cls=cls),
-        # deserializer=partial(instrument_from_dict, cls=cls),
-        partition_keys=tuple(),
-    )
-
-# Other defined schemas
-for cls, schema in NAUTILUS_PARQUET_SCHEMA.items():
-    register_parquet(cls, schema=schema)
+order_book_register(func=register_parquet)

@@ -12,18 +12,3 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
-
-from nautilus_trader.common.providers cimport InstrumentProvider
-from nautilus_trader.model.identifiers cimport Venue
-from nautilus_trader.model.instruments.base cimport Instrument
-
-
-cdef class OandaInstrumentProvider(InstrumentProvider):
-    cdef object _client
-    cdef str _account_id
-
-    cdef readonly Venue venue
-    """The venue of the provider.\n\n:returns: `Venue`"""
-
-    cpdef void load_all(self) except *
-    cdef Instrument _parse_instrument(self, dict values)
