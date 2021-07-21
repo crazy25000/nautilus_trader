@@ -5,7 +5,6 @@ from typing import List, Optional, Tuple
 from dask.base import normalize_token
 from dask.base import tokenize
 from dask import delayed
-import pandas as pd
 
 from nautilus_trader.backtest.data_loader import DataCatalog
 from nautilus_trader.backtest.engine import BacktestEngine
@@ -130,7 +129,7 @@ def _load(config: BacktestDataConfig):
     query = config.query
     return {
         "type": query["cls"],
-        "data": catalog.query(**query),
+        "data": catalog._query(**query),
         "client_id": config.client_id,
     }
 
@@ -184,7 +183,7 @@ def run_engine(engine, strategies):
     engine.run(strategies=strategies)
     data = {
         "positions": engine.trader.generate_positions_report(),
-        "strategy_params": strategies[0].gparams()
+        "strategy_params": strategies[0].gparams(),
     }
     engine.dispose()
     return data
@@ -237,8 +236,10 @@ def build_graph(backtest_configs, sync=False, use_custom_df=False):
         input_data = []
         for data_config in config.data_config:
             if use_custom_df:
-                input_data.append({"data": config.data_config[data_config], "type": QuoteTick, "client_id": None})
-            else:            
+                input_data.append(
+                    {"data": config.data_config[data_config], "type": QuoteTick, "client_id": None}
+                )
+            else:
                 load_func = (
                     _load
                     if sync

@@ -622,11 +622,11 @@ class MockCacheDatabase(CacheDatabase):
         """
         super().__init__(trader_id, logger)
 
-        self.currencies = {}  # type: dict[str, Currency]
-        self.instruments = {}  # type: dict[InstrumentId, Instrument]
-        self.accounts = {}  # type: dict[AccountId, Account]
-        self.orders = {}  # type: dict[ClientOrderId, Order]
-        self.positions = {}  # type: dict[PositionId, Position]
+        self.currencies: Dict = {}
+        self.instruments: Dict = {}
+        self.accounts: Dict = {}
+        self.orders: Dict = {}
+        self.positions: Dict = {}
 
     def flush(self) -> None:
         self.accounts.clear()
