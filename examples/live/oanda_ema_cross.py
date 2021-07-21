@@ -62,7 +62,7 @@ strategy1 = EMACross(
     order_id_tag="001",
 )
 print(config)
-node = TradingNode(strategies=[strategy1], config={**config})  # type: ignore
+node = TradingNode(strategies=[strategy1], config=config)  # type: ignore
 node.add_data_client_factory("OANDA", OandaDataClientFactory)
 node.build()
 

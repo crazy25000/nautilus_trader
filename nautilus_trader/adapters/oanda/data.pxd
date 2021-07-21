@@ -20,13 +20,13 @@ import threading
 from nautilus_trader.adapters.oanda.providers cimport OandaInstrumentProvider
 from nautilus_trader.core.uuid cimport UUID
 from nautilus_trader.live.data_client cimport LiveMarketDataClient
-from nautilus_trader.model.bar cimport Bar
-from nautilus_trader.model.bar cimport BarType
 from nautilus_trader.model.c_enums.price_type cimport PriceType
-from nautilus_trader.model.data cimport Data
+from nautilus_trader.model.data.bar cimport Bar
+from nautilus_trader.model.data.bar cimport BarType
+from nautilus_trader.model.data.base cimport Data
+from nautilus_trader.model.data.tick cimport QuoteTick
 from nautilus_trader.model.identifiers cimport InstrumentId
 from nautilus_trader.model.instruments.base cimport Instrument
-from nautilus_trader.model.tick cimport QuoteTick
 
 
 cdef class OandaDataClient(LiveMarketDataClient):
